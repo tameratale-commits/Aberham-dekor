@@ -1,0 +1,6 @@
+{
+  "name": "አብርሃም ዲኮር",
+  "description": "የመኪና ዲኮር እና መለዋወጫዎች መቆጣጠሪያ መተግበሪያ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
