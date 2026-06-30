@@ -42,6 +42,7 @@ import com.example.ui.theme.AccentOrange
 import com.example.ui.theme.AppThemeStyle
 import com.example.R
 import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.window.DialogProperties
@@ -188,18 +189,25 @@ fun MainDashboard(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // Interactive Hero Welcome Banner & Style Selector
+            DashboardHeroBanner(
+                currentTheme = currentTheme,
+                onThemeChange = onThemeChange
+            )
+
             // Summary Cards Block (Universal Header)
             SummaryDashboardRow(
                 todaySales = todaySalesTotal,
                 todayExpenses = todayExpensesTotal,
                 outstandingDebt = totalDebtOutstanding,
-                lowStockCount = lowStockCount
+                lowStockCount = lowStockCount,
+                currentTheme = currentTheme
             )
 
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f),
                 thickness = 1.dp,
-                modifier = Modifier.padding(vertical = 4.dp)
+                modifier = Modifier.padding(vertical = 2.dp)
             )
 
             // Switch Screen Contents Based on Selected Tab
@@ -286,74 +294,269 @@ fun SummaryDashboardRow(
     todaySales: Double,
     todayExpenses: Double,
     outstandingDebt: Double,
-    lowStockCount: Int
+    lowStockCount: Int,
+    currentTheme: AppThemeStyle
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        // Sales Card
-        Card(
-            modifier = Modifier.weight(1f),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(10.dp),
-                horizontalAlignment = Alignment.Start
-            ) {
-                Text("የዛሬ ሸያጭ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                Spacer(modifier = Modifier.height(2.dp))
+            // Today's Sales Card
+            SummaryCard(
+                title = "የዛሬ ሽያጭ",
+                value = "${formatCurrency(todaySales)} Br",
+                icon = Icons.Default.ShoppingCart,
+                accentColor = AccentGreen,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Today's Expenses Card
+            SummaryCard(
+                title = "የዛሬ ወጪ",
+                value = "${formatCurrency(todayExpenses)} Br",
+                icon = Icons.Default.AccountBalanceWallet,
+                accentColor = if (todayExpenses > 0) AccentRed else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                modifier = Modifier.weight(1f)
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Outstanding Debt Card
+            SummaryCard(
+                title = "የደንበኞች ዕዳ",
+                value = "${formatCurrency(outstandingDebt)} Br",
+                icon = Icons.Default.People,
+                accentColor = if (outstandingDebt > 0) AccentOrange else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                modifier = Modifier.weight(1f)
+            )
+
+            // Low Stock Items Card
+            SummaryCard(
+                title = "ክምችት ያለቀባቸው",
+                value = if (lowStockCount > 0) "$lowStockCount ዕቃዎች" else "ሁሉም ሙሉ ነው",
+                icon = Icons.Default.Layers,
+                accentColor = if (lowStockCount > 0) AccentRed else AccentGreen,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+fun SummaryCard(
+    title: String,
+    value: String,
+    icon: ImageVector,
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "${formatCurrency(todaySales)} Br",
-                    fontSize = 14.sp,
+                    text = title,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = value,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = AccentGreen
+                    color = accentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .background(accentColor.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
+    }
+}
 
-        // Expenses Card
-        Card(
-            modifier = Modifier.weight(1f),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(10.dp),
-                horizontalAlignment = Alignment.Start
+@Composable
+fun DashboardHeroBanner(
+    currentTheme: AppThemeStyle,
+    onThemeChange: (AppThemeStyle) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Column {
+            // Header Image Banner with dark scrim overlay
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
             ) {
-                Text("የዛሬ ወጪ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${formatCurrency(todayExpenses)} Br",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (todayExpenses > 0) AccentRed else MaterialTheme.colorScheme.onSurface
+                Image(
+                    painter = painterResource(id = R.drawable.img_car_decor_banner_1782811501631),
+                    contentDescription = "Car Decor Header",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
+                // Linear gradient scrim overlay
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.3f),
+                                    Color.Black.copy(alpha = 0.75f)
+                                )
+                            )
+                        )
+                )
+                // Text overlay
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.Bottom
+                ) {
+                    Text(
+                        text = "አብረሃም መኪና ዲኮር",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "የእለት የሽያጭ እና ክምችት መከታተያ መተግበሪያ",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 11.sp
+                    )
+                }
             }
-        }
 
-        // Debt Card
-        Card(
-            modifier = Modifier.weight(1f),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
+            // Theme Switcher row under the image
             Column(
-                modifier = Modifier.padding(10.dp),
-                horizontalAlignment = Alignment.Start
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp)
             ) {
-                Text("አጠቃላይ ዕዳ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${formatCurrency(outstandingDebt)} Br",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (outstandingDebt > 0) AccentOrange else MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "ቀለም ይቀይሩ (Theme):",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Text(
+                        text = currentTheme.amharicName,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    AppThemeStyle.values().forEach { style ->
+                        val isSelected = currentTheme == style
+                        val accentColor = when(style) {
+                            AppThemeStyle.CLASSIC_GOLD -> Color(0xFFFFB703)
+                            AppThemeStyle.NEON_RACER -> Color(0xFF00F0FF)
+                            AppThemeStyle.ROYAL_CARBON -> Color(0xFF3B82F6)
+                            AppThemeStyle.LUXURY_LEATHER -> Color(0xFFE5A93C)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 2.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (isSelected) accentColor.copy(alpha = 0.15f)
+                                    else Color.Gray.copy(alpha = 0.05f)
+                                )
+                                .border(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) accentColor else Color.Gray.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(6.dp)
+                                )
+                                .clickable { onThemeChange(style) }
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(accentColor, RoundedCornerShape(4.dp))
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = style.amharicName,
+                                    fontSize = 9.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) accentColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
