@@ -39,13 +39,27 @@ import com.example.data.model.StockTransaction
 import com.example.ui.theme.AccentGreen
 import com.example.ui.theme.AccentRed
 import com.example.ui.theme.AccentOrange
+import com.example.ui.theme.AppThemeStyle
+import com.example.R
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.window.DialogProperties
 import com.example.ui.viewmodel.BusinessViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainDashboard(viewModel: BusinessViewModel) {
+fun MainDashboard(
+    viewModel: BusinessViewModel,
+    currentTheme: AppThemeStyle,
+    onThemeChange: (AppThemeStyle) -> Unit
+) {
+    // Dialog States
+    var showHistoryDialog by remember { mutableStateOf(false) }
+    var showGuideDialog by remember { mutableStateOf(false) }
+
     // Tab States
     var selectedTab by remember { mutableStateOf(0) }
     val tabNames = listOf(
@@ -100,7 +114,7 @@ fun MainDashboard(viewModel: BusinessViewModel) {
                 title = {
                     Column {
                         Text(
-                            text = "አብርሃም የመኪና ዲኮር",
+                            text = "አብረሃም ዲኮር",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -117,10 +131,24 @@ fun MainDashboard(viewModel: BusinessViewModel) {
                         Badge(
                             containerColor = AccentRed,
                             contentColor = Color.White,
-                            modifier = Modifier.padding(end = 16.dp)
+                            modifier = Modifier.padding(end = 4.dp)
                         ) {
-                            Text("$lowStockCount ዕቃዎች ክምችት አልቋል!", modifier = Modifier.padding(4.dp), fontSize = 10.sp)
+                            Text("$lowStockCount", modifier = Modifier.padding(2.dp), fontSize = 10.sp)
                         }
+                    }
+                    IconButton(onClick = { showHistoryDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "የስራ ታሪክ መዝገብ",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(onClick = { showGuideDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "የአጠቃቀም መመሪያ እና ዲዛይን",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -229,6 +257,26 @@ fun MainDashboard(viewModel: BusinessViewModel) {
                 }
             }
         }
+    }
+
+    if (showHistoryDialog) {
+        AllHistoryDialog(
+            sales = sales,
+            stockTransactions = stockTransactions,
+            debtTransactions = debtTransactions,
+            expenses = expenses,
+            customers = customers,
+            inventoryItems = inventoryItems,
+            onDismiss = { showHistoryDialog = false }
+        )
+    }
+
+    if (showGuideDialog) {
+        GuideAndThemeDialog(
+            currentTheme = currentTheme,
+            onThemeChange = onThemeChange,
+            onDismiss = { showGuideDialog = false }
+        )
     }
 }
 
@@ -471,11 +519,34 @@ fun SaleCard(sale: Sale, onDelete: () -> Unit) {
                     fontSize = 16.sp,
                     color = AccentGreen
                 )
-                IconButton(onClick = onDelete) {
+                var showDeleteConfirm by remember { mutableStateOf(false) }
+                IconButton(onClick = { showDeleteConfirm = true }) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "Delete Sale",
                         tint = AccentRed.copy(alpha = 0.7f)
+                    )
+                }
+                if (showDeleteConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteConfirm = false },
+                        title = { Text("የመሰረዝ ማረጋገጫ", fontWeight = FontWeight.Bold) },
+                        text = { Text("እርግጠኛ ነዎት ይህንን የሽያጭ መዝገብ መሰረዝ ይፈልጋሉ?") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showDeleteConfirm = false
+                                    onDelete()
+                                }
+                            ) {
+                                Text("አዎ ሰርዝ", color = AccentRed)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDeleteConfirm = false }) {
+                                Text("ተው")
+                            }
+                        }
                     )
                 }
             }
@@ -676,11 +747,34 @@ fun InventoryCard(
                     )
                 }
 
-                IconButton(onClick = onDelete) {
+                var showDeleteConfirm by remember { mutableStateOf(false) }
+                IconButton(onClick = { showDeleteConfirm = true }) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "Delete Item",
                         tint = AccentRed.copy(alpha = 0.5f)
+                    )
+                }
+                if (showDeleteConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteConfirm = false },
+                        title = { Text("የመሰረዝ ማረጋገጫ", fontWeight = FontWeight.Bold) },
+                        text = { Text("እርግጠኛ ነዎት ይህንን ዕቃ ከመጋዘን መሰረዝ ይፈልጋሉ?") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showDeleteConfirm = false
+                                    onDelete()
+                                }
+                            ) {
+                                Text("አዎ ሰርዝ", color = AccentRed)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDeleteConfirm = false }) {
+                                Text("ተው")
+                            }
+                        }
                     )
                 }
             }
@@ -930,8 +1024,31 @@ fun CustomerDebtCard(
                         Text(text = "ስልክ: ${customer.phone}", fontSize = 11.sp, color = Color.Gray)
                     }
                 }
-                IconButton(onClick = onDelete) {
+                var showDeleteConfirm by remember { mutableStateOf(false) }
+                IconButton(onClick = { showDeleteConfirm = true }) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete", tint = AccentRed.copy(alpha = 0.5f))
+                }
+                if (showDeleteConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteConfirm = false },
+                        title = { Text("የመሰረዝ ማረጋገጫ", fontWeight = FontWeight.Bold) },
+                        text = { Text("እርግጠኛ ነዎት ይህንን ደንበኛ ማህደር መሰረዝ ይፈልጋሉ?") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showDeleteConfirm = false
+                                    onDelete()
+                                }
+                            ) {
+                                Text("አዎ ሰርዝ", color = AccentRed)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDeleteConfirm = false }) {
+                                Text("ተው")
+                            }
+                        }
+                    )
                 }
             }
 
@@ -1196,8 +1313,31 @@ fun ExpenseCard(expense: Expense, onDelete: () -> Unit) {
                     fontSize = 17.sp,
                     color = AccentRed
                 )
-                IconButton(onClick = onDelete) {
+                var showDeleteConfirm by remember { mutableStateOf(false) }
+                IconButton(onClick = { showDeleteConfirm = true }) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete Expense", tint = AccentRed.copy(alpha = 0.5f))
+                }
+                if (showDeleteConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteConfirm = false },
+                        title = { Text("የመሰረዝ ማረጋገጫ", fontWeight = FontWeight.Bold) },
+                        text = { Text("እርግጠኛ ነዎት ይህንን የወጪ መዝገብ መሰረዝ ይፈልጋሉ?") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showDeleteConfirm = false
+                                    onDelete()
+                                }
+                            ) {
+                                Text("አዎ ሰርዝ", color = AccentRed)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDeleteConfirm = false }) {
+                                Text("ተው")
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -1994,3 +2134,423 @@ fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMM dd, yyyy - hh:mm a", Locale.getDefault())
     return sdf.format(Date(timestamp))
 }
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AllHistoryDialog(
+    sales: List<Sale>,
+    stockTransactions: List<StockTransaction>,
+    debtTransactions: List<DebtTransaction>,
+    expenses: List<Expense>,
+    customers: List<Customer>,
+    inventoryItems: List<InventoryItem>,
+    onDismiss: () -> Unit
+) {
+    // Collect and sort history items
+    val combinedHistory = remember(sales, stockTransactions, debtTransactions, expenses, customers, inventoryItems) {
+        val list = mutableListOf<HistoryItem>()
+        sales.forEach { list.add(HistoryItem.SaleItem(it)) }
+        stockTransactions.forEach { tx ->
+            val itemName = inventoryItems.find { it.id == tx.itemId }?.itemName ?: "ያልታወቀ ዕቃ"
+            list.add(HistoryItem.StockTxItem(tx, itemName))
+        }
+        debtTransactions.forEach { tx ->
+            val customerName = customers.find { it.id == tx.customerId }?.name ?: "ያልታወቀ ደንበኛ"
+            list.add(HistoryItem.DebtTxItem(tx, customerName))
+        }
+        expenses.forEach { list.add(HistoryItem.ExpenseItem(it)) }
+        list.sortByDescending { it.timestamp }
+        list
+    }
+
+    Dialog(
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        onDismissRequest = onDismiss
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "ሙሉ የታሪክ መዝገብ",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                if (combinedHistory.isEmpty()) {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "ምንም የተመዘገበ ታሪክ የለም",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(combinedHistory) { item ->
+                            when (item) {
+                                is HistoryItem.SaleItem -> {
+                                    HistoryCard(
+                                        title = "ሽያጭ: ${item.sale.itemName}",
+                                        subtitle = "${formatQty(item.sale.quantity)} ${item.sale.unit} @ ${formatCurrency(item.sale.unitPrice)} Br",
+                                        amount = "+${formatCurrency(item.sale.totalPrice)} Br",
+                                        amountColor = AccentGreen,
+                                        timestamp = item.sale.timestamp,
+                                        icon = Icons.Default.ShoppingCart,
+                                        tag = if (item.sale.isRubber) "ጎማ" else "የእለት",
+                                        tagColor = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                is HistoryItem.StockTxItem -> {
+                                    val isIn = item.tx.type == "ገቢ"
+                                    HistoryCard(
+                                        title = "የመጋዘን እንቅስቃሴ: ${item.itemName}",
+                                        subtitle = "አይነት: ${item.tx.type} (${item.tx.note ?: ""})",
+                                        amount = "${if (isIn) "+" else "-"}${formatQty(item.tx.quantity)}",
+                                        amountColor = if (isIn) AccentGreen else AccentRed,
+                                        timestamp = item.tx.timestamp,
+                                        icon = Icons.Default.Layers,
+                                        tag = "ክምችት",
+                                        tagColor = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                                is HistoryItem.DebtTxItem -> {
+                                    val isDebt = item.tx.type == "ዕዳ"
+                                    HistoryCard(
+                                        title = "የዕዳ መዝገብ: ${item.customerName}",
+                                        subtitle = "አይነት: ${item.tx.type} (${item.tx.note ?: ""})",
+                                        amount = "${if (isDebt) "+" else "-"}${formatCurrency(item.tx.amount)} Br",
+                                        amountColor = if (isDebt) AccentRed else AccentGreen,
+                                        timestamp = item.tx.timestamp,
+                                        icon = Icons.Default.People,
+                                        tag = "ዕዳ",
+                                        tagColor = if (isDebt) AccentRed else AccentGreen
+                                    )
+                                }
+                                is HistoryItem.ExpenseItem -> {
+                                    HistoryCard(
+                                        title = "ወጪ: ${item.expense.title}",
+                                        subtitle = "ዘርፍ: ${item.expense.category}",
+                                        amount = "-${formatCurrency(item.expense.amount)} Br",
+                                        amountColor = AccentRed,
+                                        timestamp = item.expense.timestamp,
+                                        icon = Icons.Default.AccountBalanceWallet,
+                                        tag = "ወጪ",
+                                        tagColor = AccentRed
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+sealed class HistoryItem(val timestamp: Long) {
+    class SaleItem(val sale: Sale) : HistoryItem(sale.timestamp)
+    class StockTxItem(val tx: StockTransaction, val itemName: String) : HistoryItem(tx.timestamp)
+    class DebtTxItem(val tx: DebtTransaction, val customerName: String) : HistoryItem(tx.timestamp)
+    class ExpenseItem(val expense: Expense) : HistoryItem(expense.timestamp)
+}
+
+@Composable
+fun HistoryCard(
+    title: String,
+    subtitle: String,
+    amount: String,
+    amountColor: Color,
+    timestamp: Long,
+    icon: ImageVector,
+    tag: String,
+    tagColor: Color
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(tagColor.copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = tagColor, modifier = Modifier.size(20.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = title,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        SuggestionChip(
+                            onClick = {},
+                            label = { Text(tag, fontSize = 8.sp) },
+                            modifier = Modifier.height(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(text = subtitle, fontSize = 11.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(text = formatDate(timestamp), fontSize = 9.sp, color = Color.Gray.copy(alpha = 0.7f))
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = amount,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                color = amountColor
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GuideAndThemeDialog(
+    currentTheme: AppThemeStyle,
+    onThemeChange: (AppThemeStyle) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        onDismissRequest = onDismiss
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column {
+                // Header Image Banner
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.img_car_decor_banner_1782811501631),
+                        contentDescription = "Car Decor Banner",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    // Dark overlay
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f))
+                    )
+                    // Text and close button over image
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .align(Alignment.BottomStart),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "አብረሃም ዲኮር",
+                                color = Color.White,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "የአጠቃቀም መመሪያ እና የዲዛይን ምርጫ",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 12.sp
+                            )
+                        }
+                        IconButton(
+                            onClick = onDismiss,
+                            colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f))
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        }
+                    }
+                }
+
+                // Scrollable Contents
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Part 1: Theme Selector
+                    item {
+                        Text(
+                            text = "🎨 የመተግበሪያውን ዲዛይን ይምረጡ",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "ለስራዎ የሚስማማውን የመኪና ዲኮር ቀለም ጭብጥ ይምረጡ።",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Grid of themes
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AppThemeStyle.values().forEach { style ->
+                                val isSelected = currentTheme == style
+                                val (accentColor, cardBg) = when(style) {
+                                    AppThemeStyle.CLASSIC_GOLD -> Color(0xFFFFB703) to Color(0xFF1B1E23)
+                                    AppThemeStyle.NEON_RACER -> Color(0xFF00F0FF) to Color(0xFF12181F)
+                                    AppThemeStyle.ROYAL_CARBON -> Color(0xFF3B82F6) to Color(0xFF152033)
+                                    AppThemeStyle.LUXURY_LEATHER -> Color(0xFFE5A93C) to Color(0xFF1C1614)
+                                }
+
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onThemeChange(style) },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelected) cardBg else MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+                                    ),
+                                    border = BorderStroke(
+                                        width = if (isSelected) 2.dp else 1.dp,
+                                        color = if (isSelected) accentColor else Color.Gray.copy(alpha = 0.3f)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .background(accentColor, RoundedCornerShape(12.dp))
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = style.amharicName,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 14.sp
+                                                )
+                                                Text(
+                                                    text = style.displayName,
+                                                    fontSize = 10.sp,
+                                                    color = Color.Gray
+                                                )
+                                            }
+                                        }
+                                        RadioButton(
+                                            selected = isSelected,
+                                            onClick = { onThemeChange(style) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Divider
+                    item {
+                        HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
+                    }
+
+                    // Part 2: User Guide in Amharic
+                    item {
+                        Text(
+                            text = "📖 የአጠቃቀም መመሪያ (Amharic User Guide)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        val guides = listOf(
+                            Triple("🛒 የእለት ሽያጭ መቆጣጠሪያ", "በዚህ ገጽ ላይ የእለት ሽያጮችን ይመዝግቡ። ዕቃ ስም ሲያስገቡ በራስ-ሰር ከመጋዘን ክምችት ላይ ይቀንሳል። ደንበኛ ስም ከተጠቀሰ በኋላ እዳ ካለበት በደንበኛ ዕዳ ስር ማያያዝ ይችላሉ።", "ሽያጮችን መመዝገብ"),
+                            Triple("📦 የመጋዘን ቁጥጥር", "መጋዘን ውስጥ አዳዲስ የመኪና ዲኮር ዕቃዎችን መመዝገብ፣ አሁን ያለውን ክምችት መጠን (Stock Level) ማየት፣ እና ዕቃዎችን 'ገቢ' ወይም 'ወጪ' በማድረግ ክምችቱን ማስተካከል ይችላሉ። ክምችቱ ከአነስተኛ የደህንነት ወሰን በታች ሲወርድ መተግበሪያው ቀይ የማስጠንቀቂያ ቀለም ያሳያል።", "ክምችት መቆጣጠር"),
+                            Triple("👥 የደንበኞች ዕዳ እና ክፍያ", "ደንበኞችን በስም እና ስልክ ቁጥር ይመዝግቡ። ደንበኛው ያለበትን ጠቅላላ ዕዳ እና የፈጸመውን ክፍያ ታሪክ ዝርዝር ሁኔታ እዚህ ማየት እና ማስተካከል ይችላሉ።", "እዳ ማስተዳደር"),
+                            Triple("🚗 የጎማ ሽያጭ", "የጎማ ሽያጮች በሜትር እና በተለየ ዘርፍ መመዝገብ ስላለባቸው፣ በዚህ ገጽ ላይ በቀላሉ የሽያጭ መጠን እና ዋጋን በሜትር ማስላት ይችላሉ።", "የጎማ ሽያጭ"),
+                            Triple("💸 የእለት ወጪዎች", "ለስራው የሚወጡ ማናቸውንም ወጪዎች (ለምчнее የቤት ኪራይ፣ ደመወዝ፣ መብራት/ውሃ፣ ዕቃ መግዣ) በመመዝገብ በየእለቱ የሚወጣውን ገንዘብ ይከታተሉ።", "ወጪ መቆጣጠር"),
+                            Triple("🕰️ የታሪክ መዝገብ", "ሁሉንም በስра ላይ የተከናወኑ ሽያጭዎችን፣ ክምችት ማስተካከያዎችን፣ የዕዳ ዝርዝሮችን፣ እና ወጪዎችን በአንድ ላይ በቅደም ተከተል ለመመልከት በስተቀኝ ያለውን የታሪክ ምልክት (History icon) ይጫኑ።", "ታሪክ መመልከት")
+                        )
+
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            guides.forEach { (title, desc, tag) ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = title,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = desc,
+                                        fontSize = 12.sp,
+                                        lineHeight = 18.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

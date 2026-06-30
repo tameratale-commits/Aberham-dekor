@@ -19,6 +19,7 @@ data class Sale(
 @Entity(tableName = "inventory_items")
 data class InventoryItem(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val timestamp: Long = System.currentTimeMillis(),
     val itemName: String,
     val quantity: Double, // Stock level
     val unit: String, // "ሜትር", "ቁጥር"
@@ -40,7 +41,8 @@ data class Customer(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
     val phone: String? = null,
-    val totalDebt: Double = 0.0
+    val totalDebt: Double = 0.0,
+    val timestamp: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "debt_transactions")
