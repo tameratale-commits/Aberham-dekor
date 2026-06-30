@@ -77,6 +77,15 @@ class BusinessViewModel(application: Application) : AndroidViewModel(application
     // --- ACTIONS ---
 
     // 1. Add Sale
+    private fun playWarningSound() {
+        try {
+            val toneGen = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 100)
+            toneGen.startTone(android.media.ToneGenerator.TONE_SUP_ERROR, 350)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun addSale(
         itemName: String,
         quantity: Double,
@@ -86,21 +95,40 @@ class BusinessViewModel(application: Application) : AndroidViewModel(application
         isRubber: Boolean
     ) {
         viewModelScope.launch {
+            val trimmedName = itemName.trim()
+            // Auto Stock Deduction & Find Purchase Price (If matches inventory item name)
+            val items = repository.allInventoryItems.first()
+            val matchingItem = items.find { it.itemName.trim().equals(trimmedName, ignoreCase = true) }
+            val determinedPurchasePrice = matchingItem?.purchasePrice ?: 0.0
+
+            if (matchingItem != null) {
+                // Check if selling quantity exceeds available warehouse stock
+                if (quantity > matchingItem.quantity) {
+                    playWarningSound()
+                    _message.value = "ስህተት፡ የተሸጠው መጠን ($quantity) መጋዘን ውስጥ ካለው ክምችት (${matchingItem.quantity}) ይበልጣል! ማስገባት አይቻልም።"
+                    return@launch
+                }
+                // Check if selling price is below purchase price
+                if (unitPrice < matchingItem.purchasePrice) {
+                    playWarningSound()
+                    _message.value = "ስህተት፡ የተሸጠበት ዋጋ (${unitPrice} Br) እቃው ከተገዛበት ዋጋ (${matchingItem.purchasePrice} Br) በታች ነው! ማስገባት አይቻልም።"
+                    return@launch
+                }
+            }
+
             val totalPrice = quantity * unitPrice
             val sale = Sale(
-                itemName = itemName,
+                itemName = trimmedName,
                 quantity = quantity,
                 unit = unit,
                 unitPrice = unitPrice,
+                purchasePrice = determinedPurchasePrice,
                 totalPrice = totalPrice,
                 customerName = if (customerName?.isNotBlank() == true) customerName else null,
                 isRubber = isRubber
             )
             repository.insertSale(sale)
 
-            // Auto Stock Deduction (If matches inventory item name)
-            val items = repository.allInventoryItems.first()
-            val matchingItem = items.find { it.itemName.equals(itemName, ignoreCase = true) }
             if (matchingItem != null) {
                 repository.adjustStock(
                     itemId = matchingItem.id,
@@ -127,7 +155,7 @@ class BusinessViewModel(application: Application) : AndroidViewModel(application
     }
 
     // 2. Add/Adjust Warehouse Inventory
-    fun addInventoryItem(itemName: String, quantity: Double, unit: String, minAlert: Double) {
+    fun addInventoryItem(itemName: String, quantity: Double, unit: String, minAlert: Double, purchasePrice: Double) {
         viewModelScope.launch {
             val items = repository.allInventoryItems.first()
             val exists = items.any { it.itemName.equals(itemName, ignoreCase = true) }
@@ -138,9 +166,10 @@ class BusinessViewModel(application: Application) : AndroidViewModel(application
 
             val newItem = InventoryItem(
                 itemName = itemName,
-                quantity = quantity,
+                quantity = 0.0,
                 unit = unit,
-                minStockAlert = minAlert
+                minStockAlert = minAlert,
+                purchasePrice = purchasePrice
             )
             val id = repository.insertInventoryItem(newItem)
             // Log transaction

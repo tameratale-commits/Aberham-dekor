@@ -29,6 +29,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.Customer
 import com.example.data.model.DebtTransaction
@@ -103,8 +105,13 @@ fun MainDashboard(
         }.timeInMillis
     }
 
-    val todaySalesTotal = sales.filter { it.timestamp >= todayStart }.sumOf { it.totalPrice }
-    val todayExpensesTotal = expenses.filter { it.timestamp >= todayStart }.sumOf { it.amount }
+    val todaySalesRaw = sales.filter { it.timestamp >= todayStart }.sumOf { it.totalPrice }
+    val todayExpensesRaw = expenses.filter { it.timestamp >= todayStart }.sumOf { it.amount }
+    val todayDebtRegistered = debtTransactions.filter { it.timestamp >= todayStart && it.type == "ዕዳ" }.sumOf { it.amount }
+    val todayDebtPaid = debtTransactions.filter { it.timestamp >= todayStart && it.type == "ክፍያ" }.sumOf { it.amount }
+
+    val todaySalesTotal = todaySalesRaw + todayDebtPaid
+    val todayExpensesTotal = todayExpensesRaw + todayDebtRegistered
     val totalDebtOutstanding = customers.sumOf { it.totalDebt }
     val lowStockCount = inventoryItems.filter { it.quantity <= it.minStockAlert }.size
 
@@ -201,7 +208,11 @@ fun MainDashboard(
                 todayExpenses = todayExpensesTotal,
                 outstandingDebt = totalDebtOutstanding,
                 lowStockCount = lowStockCount,
-                currentTheme = currentTheme
+                currentTheme = currentTheme,
+                todaySalesRaw = todaySalesRaw,
+                todayExpensesRaw = todayExpensesRaw,
+                todayDebtRegistered = todayDebtRegistered,
+                todayDebtPaid = todayDebtPaid
             )
 
             HorizontalDivider(
@@ -220,16 +231,16 @@ fun MainDashboard(
                     0 -> DailySalesScreen(
                         sales = generalSales,
                         inventory = inventoryItems,
-                        onAddSale = { name, qty, unit, price, cust ->
-                            viewModel.addSale(name, qty, unit, price, cust, isRubber = false)
+                        onAddSale = { name, qty, unit, sellPrice, cust ->
+                            viewModel.addSale(itemName = name, quantity = qty, unit = unit, unitPrice = sellPrice, customerName = cust, isRubber = false)
                         },
                         onDeleteSale = { viewModel.deleteSale(it) }
                     )
                     1 -> InventoryScreen(
                         items = inventoryItems,
                         transactions = stockTransactions,
-                        onAddItem = { name, qty, unit, alert ->
-                            viewModel.addInventoryItem(name, qty, unit, alert)
+                        onAddItem = { name, qty, unit, alert, buyPrice ->
+                            viewModel.addInventoryItem(name, qty, unit, alert, buyPrice)
                         },
                         onAdjustStock = { id, type, qty, note ->
                             viewModel.adjustStock(id, type, qty, note)
@@ -250,13 +261,14 @@ fun MainDashboard(
                     3 -> RubberSalesScreen(
                         sales = rubberSales,
                         inventory = inventoryItems,
-                        onAddRubberSale = { name, qty, price, cust ->
-                            viewModel.addSale(name, qty, "ሜትር", price, cust, isRubber = true)
+                        onAddRubberSale = { name, qty, sellPrice, cust ->
+                            viewModel.addSale(itemName = name, quantity = qty, unit = "ሜትር", unitPrice = sellPrice, customerName = cust, isRubber = true)
                         },
                         onDeleteSale = { viewModel.deleteSale(it) }
                     )
                     4 -> ExpensesScreen(
                         expenses = expenses,
+                        debtTransactions = debtTransactions,
                         onAddExpense = { title, category, amount ->
                             viewModel.addExpense(title, category, amount)
                         },
@@ -295,13 +307,70 @@ fun SummaryDashboardRow(
     todayExpenses: Double,
     outstandingDebt: Double,
     lowStockCount: Int,
-    currentTheme: AppThemeStyle
+    currentTheme: AppThemeStyle,
+    todaySalesRaw: Double = 0.0,
+    todayExpensesRaw: Double = 0.0,
+    todayDebtRegistered: Double = 0.0,
+    todayDebtPaid: Double = 0.0
 ) {
+    val todayNet = todaySales - todayExpenses
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
+        // Today's Net Remaining Balance (ከወጪ ቀሪ) Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "የእለቱ ጠቅላላ ቀሪ (ከወጪ ቀሪ)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${formatCurrency(todayNet)} Br",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (todayNet >= 0) AccentGreen else AccentRed
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(
+                            (if (todayNet >= 0) AccentGreen else AccentRed).copy(alpha = 0.12f),
+                            RoundedCornerShape(8.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (todayNet >= 0) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                        contentDescription = null,
+                        tint = if (todayNet >= 0) AccentGreen else AccentRed,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -312,7 +381,8 @@ fun SummaryDashboardRow(
                 value = "${formatCurrency(todaySales)} Br",
                 icon = Icons.Default.ShoppingCart,
                 accentColor = AccentGreen,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                subtitle = "ሽያጭ: ${formatCurrency(todaySalesRaw)} + ክፍያ: ${formatCurrency(todayDebtPaid)}"
             )
 
             // Today's Expenses Card
@@ -321,7 +391,8 @@ fun SummaryDashboardRow(
                 value = "${formatCurrency(todayExpenses)} Br",
                 icon = Icons.Default.AccountBalanceWallet,
                 accentColor = if (todayExpenses > 0) AccentRed else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                subtitle = "ወጪ: ${formatCurrency(todayExpensesRaw)} + ዕዳ: ${formatCurrency(todayDebtRegistered)}"
             )
         }
         
@@ -358,7 +429,8 @@ fun SummaryCard(
     value: String,
     icon: ImageVector,
     accentColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    subtitle: String? = null
 ) {
     Card(
         modifier = modifier,
@@ -391,6 +463,16 @@ fun SummaryCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (subtitle != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Box(
                 modifier = Modifier
@@ -642,10 +724,11 @@ fun DailySalesScreen(
             AddSaleDialog(
                 inventory = inventory,
                 isRubberOnly = false,
+                sales = sales,
+                onDeleteSale = onDeleteSale,
                 onDismiss = { showAddDialog = false },
-                onConfirm = { name, qty, unit, price, customer ->
-                    onAddSale(name, qty, unit, price, customer)
-                    showAddDialog = false
+                onConfirm = { name, qty, unit, sellPrice, customer ->
+                    onAddSale(name, qty, unit, sellPrice, customer)
                 }
             )
         }
@@ -684,17 +767,22 @@ fun SaleCard(sale: Sale, onDelete: () -> Unit) {
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         "መጠን: ${formatQty(sale.quantity)} ${sale.unit}",
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     Text(
-                        "ዋጋ: ${formatCurrency(sale.unitPrice)} Br",
-                        fontSize = 12.sp,
+                        "የተገዛበት: ${formatCurrency(sale.purchasePrice)} Br",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        "የተሸጠበት: ${formatCurrency(sale.unitPrice)} Br",
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
@@ -710,8 +798,8 @@ fun SaleCard(sale: Sale, onDelete: () -> Unit) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = formatDate(sale.timestamp),
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
             }
 
@@ -765,7 +853,7 @@ fun SaleCard(sale: Sale, onDelete: () -> Unit) {
 fun InventoryScreen(
     items: List<InventoryItem>,
     transactions: List<StockTransaction>,
-    onAddItem: (String, Double, String, Double) -> Unit,
+    onAddItem: (String, Double, String, Double, Double) -> Unit,
     onAdjustStock: (Int, String, Double, String?) -> Unit,
     onDeleteItem: (InventoryItem) -> Unit
 ) {
@@ -894,24 +982,26 @@ fun InventoryScreen(
 
     if (showAddDialog) {
         AddInventoryDialog(
+            items = items,
+            onDeleteItem = onDeleteItem,
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, qty, unit, minAlert ->
-                onAddItem(name, qty, unit, minAlert)
-                showAddDialog = false
+            onConfirm = { name, qty, unit, minAlert, buyPrice ->
+                onAddItem(name, qty, unit, minAlert, buyPrice)
             }
         )
     }
 
     if (selectedItemForAdjust != null) {
         val item = selectedItemForAdjust!!
+        val filteredTxs = transactions.filter { it.itemId == item.id }
         AdjustStockDialog(
             itemName = item.itemName,
             unit = item.unit,
             type = adjustType,
+            transactions = filteredTxs,
             onDismiss = { selectedItemForAdjust = null },
             onConfirm = { qty, note ->
                 onAdjustStock(item.id, adjustType, qty, note)
-                selectedItemForAdjust = null
             }
         )
     }
@@ -944,8 +1034,14 @@ fun InventoryCard(
                     Text(text = item.itemName, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        "የደህንነት ወሰን መጠን (Min): ${formatQty(item.minStockAlert)} ${item.unit}",
+                        "የተገዛበት ዋጋ: ${formatCurrency(item.purchasePrice)} Br | የደህንነት ወሰን መጠን (Min): ${formatQty(item.minStockAlert)} ${item.unit}",
                         fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        "የተመዘገበበት ቀን፡ ${formatDate(item.timestamp)}",
+                        fontSize = 12.5.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
                 }
@@ -1082,7 +1178,7 @@ fun StockTransactionCard(tx: StockTransaction, itemName: String) {
                 if (tx.note != null) {
                     Text(text = tx.note, fontSize = 11.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Text(text = formatDate(tx.timestamp), fontSize = 9.sp, color = Color.Gray.copy(alpha = 0.7f))
+                Text(text = formatDate(tx.timestamp), fontSize = 12.sp, color = Color.Gray.copy(alpha = 0.8f))
             }
 
             Text(
@@ -1168,23 +1264,25 @@ fun CustomerDebtScreen(
 
     if (showAddDialog) {
         AddCustomerDialog(
+            customers = customers,
+            onDeleteCustomer = onDeleteCustomer,
             onDismiss = { showAddDialog = false },
             onConfirm = { name, phone, debt ->
                 onAddCustomer(name, phone, debt)
-                showAddDialog = false
             }
         )
     }
 
     if (selectedCustomerForAdjust != null) {
         val cust = selectedCustomerForAdjust!!
+        val customerTxs = transactions.filter { it.customerId == cust.id }
         AdjustDebtDialog(
             customerName = cust.name,
             type = adjustType,
+            transactions = customerTxs,
             onDismiss = { selectedCustomerForAdjust = null },
             onConfirm = { amount, note ->
                 onAdjustDebt(cust.id, adjustType, amount, note)
-                selectedCustomerForAdjust = null
             }
         )
     }
@@ -1226,6 +1324,12 @@ fun CustomerDebtCard(
                     if (customer.phone != null) {
                         Text(text = "ስልክ: ${customer.phone}", fontSize = 11.sp, color = Color.Gray)
                     }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "የተመዘገበበት ቀን፡ ${formatDate(customer.timestamp)}",
+                        fontSize = 12.5.sp,
+                        color = Color.Gray.copy(alpha = 0.8f)
+                    )
                 }
                 var showDeleteConfirm by remember { mutableStateOf(false) }
                 IconButton(onClick = { showDeleteConfirm = true }) {
@@ -1389,10 +1493,11 @@ fun RubberSalesScreen(
         AddSaleDialog(
             inventory = inventory,
             isRubberOnly = true,
+            sales = sales,
+            onDeleteSale = onDeleteSale,
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, qty, _, price, customer ->
-                onAddRubberSale(name, qty, price, customer)
-                showAddDialog = false
+            onConfirm = { name, qty, _, sellPrice, customer ->
+                onAddRubberSale(name, qty, sellPrice, customer)
             }
         )
     }
@@ -1405,11 +1510,15 @@ fun RubberSalesScreen(
 @Composable
 fun ExpensesScreen(
     expenses: List<Expense>,
+    debtTransactions: List<com.example.data.model.DebtTransaction> = emptyList(),
     onAddExpense: (String, String, Double) -> Unit,
     onDeleteExpense: (Expense) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
-    val totalExpense = expenses.sumOf { it.amount }
+    
+    val storeExpensesSum = expenses.sumOf { it.amount }
+    val customerDebtSum = debtTransactions.filter { it.type == "ዕዳ" }.sumOf { it.amount }
+    val totalExpenseCombined = storeExpensesSum + customerDebtSum
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(
@@ -1442,13 +1551,23 @@ fun ExpensesScreen(
             colors = CardDefaults.cardColors(containerColor = AccentRed.copy(alpha = 0.05f)),
             border = BorderStroke(1.dp, AccentRed.copy(alpha = 0.15f))
         ) {
-            Row(
-                modifier = Modifier.padding(14.dp).fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("አጠቃላይ የወጪዎች ድምር", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text("${formatCurrency(totalExpense)} Br", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = AccentRed)
+            Column(modifier = Modifier.padding(14.dp).fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("አጠቃላይ የወጪዎች ድምር (የሱቅ + ደንበኛ ዕዳ)", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text("${formatCurrency(totalExpenseCombined)} Br", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = AccentRed)
+                }
+                if (customerDebtSum > 0) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "• መደበኛ ወጪዎች: ${formatCurrency(storeExpensesSum)} Br | • የተመዘገበ ዕዳ: ${formatCurrency(customerDebtSum)} Br",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
             }
         }
 
@@ -1472,10 +1591,11 @@ fun ExpensesScreen(
 
     if (showAddDialog) {
         AddExpenseDialog(
+            expenses = expenses,
+            onDeleteExpense = onDeleteExpense,
             onDismiss = { showAddDialog = false },
             onConfirm = { title, category, amount ->
                 onAddExpense(title, category, amount)
-                showAddDialog = false
             }
         )
     }
@@ -1504,8 +1624,8 @@ fun ExpenseCard(expense: Expense, onDelete: () -> Unit) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = formatDate(expense.timestamp),
-                    fontSize = 10.sp,
-                    color = Color.Gray
+                    fontSize = 12.sp,
+                    color = Color.Gray.copy(alpha = 0.8f)
                 )
             }
 
@@ -1557,6 +1677,8 @@ fun ExpenseCard(expense: Expense, onDelete: () -> Unit) {
 fun AddSaleDialog(
     inventory: List<InventoryItem>,
     isRubberOnly: Boolean,
+    sales: List<Sale>,
+    onDeleteSale: (Sale) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (String, Double, String, Double, String?) -> Unit
 ) {
@@ -1578,151 +1700,190 @@ fun AddSaleDialog(
         (!isRubberOnly || it.itemName.contains("ጎማ", ignoreCase = true) || it.itemName.contains("rubber", ignoreCase = true))
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+    QuarterScreenBottomSheetDialog(onDismiss = onDismiss, scrollable = false) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = if (isRubberOnly) "የጎማ ሽያጭ መመዝገቢያ" else "የእለት ሽያጭ መመዝገቢያ",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                // Item Name (With Dropdown for matching warehouse item)
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = itemName,
-                        onValueChange = {
-                            itemName = it
-                            showInventoryDropdown = it.isNotEmpty() && matchingItems.isNotEmpty()
-                        },
-                        label = { Text("የዕቃው/የአገልግሎቱ ስም") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    
-                    // Auto-complete Warehouse Items list
-                    DropdownMenu(
-                        expanded = showInventoryDropdown,
-                        onDismissRequest = { showInventoryDropdown = false },
-                        modifier = Modifier.fillMaxWidth(0.9f)
-                    ) {
-                        Text(
-                            "ከመጋዘን ውስጥ ይምረጡ (ለመቀነስ) :",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        matchingItems.take(4).forEach { invItem ->
-                            DropdownMenuItem(
-                                text = { Text("${invItem.itemName} (ክምችት: ${formatQty(invItem.quantity)} ${invItem.unit})") },
-                                onClick = {
-                                    itemName = invItem.itemName
-                                    selectedUnit = invItem.unit
-                                    showInventoryDropdown = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Quantity and Unit Row
-                Row(
+            item {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.Start
                 ) {
-                    OutlinedTextField(
-                        value = quantityStr,
-                        onValueChange = { quantityStr = it },
-                        label = { Text("መጠን") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
+                    Text(
+                        text = if (isRubberOnly) "የጎማ ሽያጭ መመዝገቢያ" else "የእለት ሽያጭ መመዝገቢያ",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary
                     )
 
-                    // Unit selector dropdown
-                    Box(modifier = Modifier.weight(1f)) {
+                    // Item Name (With Dropdown for matching warehouse item)
+                    Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedTextField(
-                            value = selectedUnit,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("መለኪያ") },
-                            trailingIcon = {
-                                IconButton(onClick = { showUnitDropdown = true }) {
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Units")
-                                }
+                            value = itemName,
+                            onValueChange = {
+                                itemName = it
+                                showInventoryDropdown = it.isNotEmpty() && matchingItems.isNotEmpty()
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            label = { Text("የዕቃው/የአገልግሎቱ ስም") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
                         )
+                        
+                        // Auto-complete Warehouse Items list
                         DropdownMenu(
-                            expanded = showUnitDropdown,
-                            onDismissRequest = { showUnitDropdown = false }
+                            expanded = showInventoryDropdown,
+                            onDismissRequest = { showInventoryDropdown = false },
+                            modifier = Modifier.fillMaxWidth(0.9f)
                         ) {
-                            units.forEach { u ->
+                            Text(
+                                "ከመጋዘን ውስጥ ይምረጡ (ለመቀነስ) :",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            matchingItems.take(4).forEach { invItem ->
                                 DropdownMenuItem(
-                                    text = { Text(u) },
+                                    text = { Text("${invItem.itemName} (ክምችት: ${formatQty(invItem.quantity)} ${invItem.unit})") },
                                     onClick = {
-                                        selectedUnit = u
-                                        showUnitDropdown = false
+                                        itemName = invItem.itemName
+                                        selectedUnit = invItem.unit
+                                        showInventoryDropdown = false
                                     }
                                 )
                             }
                         }
                     }
-                }
 
-                // Unit Price
-                OutlinedTextField(
-                    value = unitPriceStr,
-                    onValueChange = { unitPriceStr = it },
-                    label = { Text("የአንዱ ዋጋ (Birr)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                // Optional Customer Name
-                OutlinedTextField(
-                    value = customerName,
-                    onValueChange = { customerName = it },
-                    label = { Text("የደንበኛ ስም (አማራጭ)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Actions
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("ተመለስ", color = Color.Gray)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            val qty = quantityStr.toDoubleOrNull() ?: 1.0
-                            val price = unitPriceStr.toDoubleOrNull() ?: 0.0
-                            if (itemName.isNotBlank() && price > 0) {
-                                onConfirm(itemName, qty, selectedUnit, price, customerName)
-                            }
-                        },
-                        enabled = itemName.isNotBlank() && (unitPriceStr.toDoubleOrNull() ?: 0.0) > 0
+                    // Quantity and Unit Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("መዝግብ")
+                        OutlinedTextField(
+                            value = quantityStr,
+                            onValueChange = { quantityStr = it },
+                            label = { Text("መጠን") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+
+                        // Unit selector dropdown
+                        Box(modifier = Modifier.weight(1f)) {
+                            OutlinedTextField(
+                                value = selectedUnit,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("መለኪያ") },
+                                trailingIcon = {
+                                    IconButton(onClick = { showUnitDropdown = true }) {
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Units")
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            DropdownMenu(
+                                expanded = showUnitDropdown,
+                                onDismissRequest = { showUnitDropdown = false }
+                            ) {
+                                units.forEach { u ->
+                                    DropdownMenuItem(
+                                        text = { Text(u) },
+                                        onClick = {
+                                            selectedUnit = u
+                                            showUnitDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
+
+                    // Selling Price Row (የተሸጠበት ዋጋ)
+                    OutlinedTextField(
+                        value = unitPriceStr,
+                        onValueChange = { unitPriceStr = it },
+                        label = { Text("የተሸጠበት ዋጋ (Birr)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    // Optional Customer Name
+                    OutlinedTextField(
+                        value = customerName,
+                        onValueChange = { customerName = it },
+                        label = { Text("የደንበኛ ስም (አማራጭ)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Actions
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text("ተመለስ", color = Color.Gray)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val qty = quantityStr.toDoubleOrNull() ?: 1.0
+                                val price = unitPriceStr.toDoubleOrNull() ?: 0.0
+                                if (itemName.isNotBlank() && price > 0) {
+                                    onConfirm(itemName, qty, selectedUnit, price, customerName)
+                                    // Clear form inputs for continuous entries
+                                    itemName = ""
+                                    quantityStr = ""
+                                    unitPriceStr = ""
+                                    customerName = ""
+                                }
+                            },
+                            enabled = itemName.isNotBlank() && (unitPriceStr.toDoubleOrNull() ?: 0.0) > 0
+                        ) {
+                            Text("መዝግብ")
+                        }
+                    }
+                }
+            }
+
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = if (isRubberOnly) "ዛሬ የተመዘገቡ የጎማ ሽያጮች" else "ዛሬ የተመዘገቡ ሽያጮች / ስራዎች",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            if (sales.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("እስካሁን ምንም የተመዘገበ የለም", color = Color.Gray, fontSize = 13.sp)
+                    }
+                }
+            } else {
+                items(sales) { sale ->
+                    SaleCard(sale = sale, onDelete = { onDeleteSale(sale) })
                 }
             }
         }
@@ -1731,116 +1892,173 @@ fun AddSaleDialog(
 
 @Composable
 fun AddInventoryDialog(
+    items: List<InventoryItem>,
+    onDeleteItem: (InventoryItem) -> Unit,
     onDismiss: () -> Unit,
-    onConfirm: (String, Double, String, Double) -> Unit
+    onConfirm: (String, Double, String, Double, Double) -> Unit
 ) {
     var itemName by remember { mutableStateOf("") }
     var qtyStr by remember { mutableStateOf("") }
+    var purchasePriceStr by remember { mutableStateOf("") }
     var minAlertStr by remember { mutableStateOf("5") }
 
     val units = listOf("ቁጥር", "ሜትር")
     var selectedUnit by remember { mutableStateOf(units[0]) }
     var showUnitDropdown by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+    QuarterScreenBottomSheetDialog(onDismiss = onDismiss, scrollable = false) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "አዲስ ዕቃ መጋዘን ውስጥ መመዝገቢያ",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                OutlinedTextField(
-                    value = itemName,
-                    onValueChange = { itemName = it },
-                    label = { Text("የዕቃው ስም (ለምሳሌ፡ የበር ጎማ)") },
+            item {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.Start
                 ) {
+                    Text(
+                        text = "አዲስ ዕቃ መጋዘን ውስጥ መመዝገቢያ",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
                     OutlinedTextField(
-                        value = qtyStr,
-                        onValueChange = { qtyStr = it },
-                        label = { Text("የመጀመሪያ መጠን") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
+                        value = itemName,
+                        onValueChange = { itemName = it },
+                        label = { Text("የዕቃው ስም (ለምሳሌ፡ የበር ጎማ)") },
+                        modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
 
-                    Box(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         OutlinedTextField(
-                            value = selectedUnit,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("መለኪያ") },
-                            trailingIcon = {
-                                IconButton(onClick = { showUnitDropdown = true }) {
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Units")
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
+                            value = qtyStr,
+                            onValueChange = { qtyStr = it },
+                            label = { Text("የመጀመሪያ መጠን") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
                         )
-                        DropdownMenu(
-                            expanded = showUnitDropdown,
-                            onDismissRequest = { showUnitDropdown = false }
-                        ) {
-                            units.forEach { u ->
-                                DropdownMenuItem(
-                                    text = { Text(u) },
-                                    onClick = {
-                                        selectedUnit = u
-                                        showUnitDropdown = false
+
+                        Box(modifier = Modifier.weight(1f)) {
+                            OutlinedTextField(
+                                value = selectedUnit,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("መለኪያ") },
+                                trailingIcon = {
+                                    IconButton(onClick = { showUnitDropdown = true }) {
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Units")
                                     }
-                                )
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            DropdownMenu(
+                                expanded = showUnitDropdown,
+                                onDismissRequest = { showUnitDropdown = false }
+                            ) {
+                                units.forEach { u ->
+                                    DropdownMenuItem(
+                                        text = { Text(u) },
+                                        onClick = {
+                                            selectedUnit = u
+                                            showUnitDropdown = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                OutlinedTextField(
-                    value = minAlertStr,
-                    onValueChange = { minAlertStr = it },
-                    label = { Text("ዝቅተኛ የክምችት ማሳሰቢያ መጠን (Min)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                    OutlinedTextField(
+                        value = purchasePriceStr,
+                        onValueChange = { purchasePriceStr = it },
+                        label = { Text("የተገዛበት ዋጋ (Birr)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = minAlertStr,
+                        onValueChange = { minAlertStr = it },
+                        label = { Text("ዝቅተኛ የክምችት ማሳሰቢያ መጠን (Min)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("ተመለስ", color = Color.Gray)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            val qty = qtyStr.toDoubleOrNull() ?: 0.0
-                            val alert = minAlertStr.toDoubleOrNull() ?: 5.0
-                            if (itemName.isNotBlank() && qty >= 0) {
-                                onConfirm(itemName, qty, selectedUnit, alert)
-                            }
-                        },
-                        enabled = itemName.isNotBlank() && (qtyStr.toDoubleOrNull() ?: -1.0) >= 0
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Text("ዕቃውን መዝግብ")
+                        TextButton(onClick = onDismiss) {
+                            Text("ተመለስ", color = Color.Gray)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val qty = qtyStr.toDoubleOrNull() ?: 0.0
+                                val alert = minAlertStr.toDoubleOrNull() ?: 5.0
+                                val buyPrice = purchasePriceStr.toDoubleOrNull() ?: 0.0
+                                if (itemName.isNotBlank() && qty >= 0) {
+                                    onConfirm(itemName, qty, selectedUnit, alert, buyPrice)
+                                    // Clear form for continuous entries
+                                    itemName = ""
+                                    qtyStr = ""
+                                    purchasePriceStr = ""
+                                    minAlertStr = "5"
+                                }
+                            },
+                            enabled = itemName.isNotBlank() && (qtyStr.toDoubleOrNull() ?: -1.0) >= 0
+                        ) {
+                            Text("ዕቃውን መዝግብ")
+                        }
                     }
+                }
+            }
+
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "በመጋዘን ውስጥ ያሉ ዕቃዎች",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            if (items.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("እስካሁን ምንም ዕቃ አልተመዘገበም", color = Color.Gray, fontSize = 13.sp)
+                    }
+                }
+            } else {
+                items(items) { item ->
+                    InventoryCard(
+                        item = item,
+                        onStockIn = {},
+                        onStockOut = {},
+                        onDelete = { onDeleteItem(item) }
+                    )
                 }
             }
         }
@@ -1852,71 +2070,109 @@ fun AdjustStockDialog(
     itemName: String,
     unit: String,
     type: String, // "ገቢ" or "ወጭ"
+    transactions: List<StockTransaction>,
     onDismiss: () -> Unit,
     onConfirm: (Double, String?) -> Unit
 ) {
     var qtyStr by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+    QuarterScreenBottomSheetDialog(onDismiss = onDismiss, scrollable = false) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = if (type == "ገቢ") "ክምችት ገቢ (ጨምር)" else "ክምችት ወጪ (ቀንስ)",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = if (type == "ገቢ") AccentGreen else AccentRed
-                )
-                Text(text = "ዕቃ: $itemName", fontWeight = FontWeight.Medium, fontSize = 14.sp)
-
-                OutlinedTextField(
-                    value = qtyStr,
-                    onValueChange = { qtyStr = it },
-                    label = { Text("መጠን በ $unit") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            item {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("ምክንያት/ማስታወሻ (አማራጭ)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.Start
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("ተመለስ", color = Color.Gray)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            val qty = qtyStr.toDoubleOrNull() ?: 0.0
-                            if (qty > 0) {
-                                onConfirm(qty, if (note.isBlank()) null else note)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (type == "ገቢ") AccentGreen else AccentRed
-                        ),
-                        enabled = (qtyStr.toDoubleOrNull() ?: 0.0) > 0
+                    Text(
+                        text = if (type == "ገቢ") "ክምችት ገቢ (ጨምር)" else "ክምችት ወጪ (ቀንስ)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = if (type == "ገቢ") AccentGreen else AccentRed
+                    )
+                    Text(text = "ዕቃ: $itemName", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+
+                    OutlinedTextField(
+                        value = qtyStr,
+                        onValueChange = { qtyStr = it },
+                        label = { Text("መጠን በ $unit") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        label = { Text("ምክንያት/ማስታወሻ (አማራጭ)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Text("አረጋግጥ")
+                        TextButton(onClick = onDismiss) {
+                            Text("ተመለስ", color = Color.Gray)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val qty = qtyStr.toDoubleOrNull() ?: 0.0
+                                if (qty > 0) {
+                                    onConfirm(qty, if (note.isBlank()) null else note)
+                                    // Clear form for continuous entries
+                                    qtyStr = ""
+                                    note = ""
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (type == "ገቢ") AccentGreen else AccentRed
+                            ),
+                            enabled = (qtyStr.toDoubleOrNull() ?: 0.0) > 0
+                        ) {
+                            Text("አረጋግጥ")
+                        }
                     }
+                }
+            }
+
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "የዚህ ዕቃ የክምችት እንቅስቃሴ ታሪክ",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            if (transactions.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("እስካሁን ምንም ታሪክ የለም", color = Color.Gray, fontSize = 13.sp)
+                    }
+                }
+            } else {
+                items(transactions) { tx ->
+                    StockTransactionCard(tx = tx, itemName = itemName)
                 }
             }
         }
@@ -1925,6 +2181,8 @@ fun AdjustStockDialog(
 
 @Composable
 fun AddCustomerDialog(
+    customers: List<Customer>,
+    onDeleteCustomer: (Customer) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (String, String?, Double) -> Unit
 ) {
@@ -1932,70 +2190,114 @@ fun AddCustomerDialog(
     var phone by remember { mutableStateOf("") }
     var initialDebtStr by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+    QuarterScreenBottomSheetDialog(onDismiss = onDismiss, scrollable = false) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "አዲስ ደንበኛ መመዝገቢያ",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("የደንበኛ ሙሉ ስም") },
+            item {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
-                    label = { Text("ስልክ ቁጥር (አማራጭ)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = initialDebtStr,
-                    onValueChange = { initialDebtStr = it },
-                    label = { Text("የመጀመሪያ ዕዳ (ካለ በ Birr)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.Start
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("ተመለስ", color = Color.Gray)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            val debt = initialDebtStr.toDoubleOrNull() ?: 0.0
-                            if (name.isNotBlank()) {
-                                onConfirm(name, phone, debt)
-                            }
-                        },
-                        enabled = name.isNotBlank()
+                    Text(
+                        text = "አዲስ ደንበኛ መመዝገቢያ",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("የደንበኛ ሙሉ ስም") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { phone = it },
+                        label = { Text("ስልክ ቁጥር (አማራጭ)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = initialDebtStr,
+                        onValueChange = { initialDebtStr = it },
+                        label = { Text("የመጀመሪያ ዕዳ (ካለ በ Birr)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Text("መዝግብ")
+                        TextButton(onClick = onDismiss) {
+                            Text("ተመለስ", color = Color.Gray)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val debt = initialDebtStr.toDoubleOrNull() ?: 0.0
+                                if (name.isNotBlank()) {
+                                    onConfirm(name, phone.ifBlank { null }, debt)
+                                    // Clear form for continuous entries
+                                    name = ""
+                                    phone = ""
+                                    initialDebtStr = ""
+                                }
+                            },
+                            enabled = name.isNotBlank()
+                        ) {
+                            Text("መዝግብ")
+                        }
                     }
+                }
+            }
+
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "የተመዘገቡ ደንበኞች ማህደር",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            if (customers.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("እስካሁን ምንም ደንበኛ አልተመዘገበም", color = Color.Gray, fontSize = 13.sp)
+                    }
+                }
+            } else {
+                items(customers) { customer ->
+                    CustomerDebtCard(
+                        customer = customer,
+                        onAddDebt = {},
+                        onAddPayment = {},
+                        onViewDetails = {},
+                        onDelete = { onDeleteCustomer(customer) }
+                    )
                 }
             }
         }
@@ -2006,70 +2308,139 @@ fun AddCustomerDialog(
 fun AdjustDebtDialog(
     customerName: String,
     type: String, // "ዕዳ" or "ክፍያ"
+    transactions: List<DebtTransaction>,
     onDismiss: () -> Unit,
     onConfirm: (Double, String?) -> Unit
 ) {
     var amountStr by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+    QuarterScreenBottomSheetDialog(onDismiss = onDismiss, scrollable = false) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = if (type == "ዕዳ") "ዕዳ መመዝገቢያ (ጨምር)" else "የዕዳ ክፍያ መመዝገቢያ (ቀንስ)",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = if (type == "ዕዳ") AccentOrange else AccentGreen
-                )
-                Text(text = "ደንበኛ: $customerName", fontWeight = FontWeight.Medium, fontSize = 14.sp)
-
-                OutlinedTextField(
-                    value = amountStr,
-                    onValueChange = { amountStr = it },
-                    label = { Text("ገንዘብ መጠን (Birr)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            item {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("ማስታወሻ/ምክንያት (ለምሳሌ፡ የበር ጎማ ዕዳ)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.Start
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("ተመለስ", color = Color.Gray)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            val amount = amountStr.toDoubleOrNull() ?: 0.0
-                            if (amount > 0) {
-                                onConfirm(amount, if (note.isBlank()) null else note)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (type == "ዕዳ") AccentOrange else AccentGreen
-                        ),
-                        enabled = (amountStr.toDoubleOrNull() ?: 0.0) > 0
+                    Text(
+                        text = if (type == "ዕዳ") "ዕዳ መመዝገቢያ (ጨምር)" else "የዕዳ ክፍያ መመዝገቢያ (ቀንስ)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = if (type == "ዕዳ") AccentOrange else AccentGreen
+                    )
+                    Text(text = "ደንበኛ: $customerName", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+
+                    OutlinedTextField(
+                        value = amountStr,
+                        onValueChange = { amountStr = it },
+                        label = { Text("ገንዘብ መጠን (Birr)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        label = { Text("ማስታወሻ/ምክንያት (ለምሳሌ፡ የበር ጎማ ዕዳ)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Text("መዝግብ")
+                        TextButton(onClick = onDismiss) {
+                            Text("ተመለስ", color = Color.Gray)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val amount = amountStr.toDoubleOrNull() ?: 0.0
+                                if (amount > 0) {
+                                    onConfirm(amount, if (note.isBlank()) null else note)
+                                    // Clear form for continuous entries
+                                    amountStr = ""
+                                    note = ""
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (type == "ዕዳ") AccentOrange else AccentGreen
+                            ),
+                            enabled = (amountStr.toDoubleOrNull() ?: 0.0) > 0
+                        ) {
+                            Text("መዝግብ")
+                        }
+                    }
+                }
+            }
+
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "የዚህ ደንበኛ የዕዳ / የክፍያ ታሪክ",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            if (transactions.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("እስካሁን ምንም ታሪክ የለም", color = Color.Gray, fontSize = 13.sp)
+                    }
+                }
+            } else {
+                items(transactions) { tx ->
+                    val isDebt = tx.type == "ዕዳ"
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (isDebt) AccentOrange.copy(alpha = 0.06f)
+                                else AccentGreen.copy(alpha = 0.06f),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isDebt) "ዕዳ ተመዘገበ" else "ክፍያ ተፈጸመ",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = if (isDebt) AccentOrange else AccentGreen
+                            )
+                            if (tx.note != null) {
+                                Text(text = tx.note, fontSize = 11.sp, color = Color.DarkGray)
+                            }
+                            Text(text = formatDate(tx.timestamp), fontSize = 12.sp, color = Color.Gray.copy(alpha = 0.8f))
+                        }
+                        Text(
+                            text = "${if (isDebt) "+" else "-"}${formatCurrency(tx.amount)} Br",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = if (isDebt) AccentOrange else AccentGreen
+                        )
                     }
                 }
             }
@@ -2083,92 +2454,87 @@ fun CustomerTxDetailsDialog(
     transactions: List<DebtTransaction>,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(max = 500.dp)
+    QuarterScreenBottomSheetDialog(onDismiss = onDismiss, scrollable = false) {
+        Column(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 500.dp),
+            horizontalAlignment = Alignment.Start
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    text = "${customer.name} - የዕዳ ታሪክ",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                if (customer.phone != null) {
-                    Text("ስልክ: ${customer.phone}", fontSize = 12.sp, color = Color.Gray)
+            Text(
+                text = "${customer.name} - የዕዳ ታሪክ",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            if (customer.phone != null) {
+                Text("ስልክ: ${customer.phone}", fontSize = 12.sp, color = Color.Gray)
+            }
+            Text(
+                "አሁን ያለበት አጠቃላይ ዕዳ: ${formatCurrency(customer.totalDebt)} Br",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = AccentOrange,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+
+            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 8.dp))
+
+            if (transactions.isEmpty()) {
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("ምንም የዕዳ/የክፍያ ታሪክ የለም", color = Color.Gray, fontSize = 13.sp)
                 }
-                Text(
-                    "አሁን ያለበት አጠቃላይ ዕዳ: ${formatCurrency(customer.totalDebt)} Br",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AccentOrange,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
-
-                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 8.dp))
-
-                if (transactions.isEmpty()) {
-                    Box(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("ምንም የዕዳ/የክፍያ ታሪክ የለም", color = Color.Gray, fontSize = 13.sp)
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(transactions) { tx ->
-                            val isDebt = tx.type == "ዕዳ"
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (isDebt) AccentOrange.copy(alpha = 0.06f)
-                                        else AccentGreen.copy(alpha = 0.06f),
-                                        shape = RoundedCornerShape(4.dp)
-                                    )
-                                    .padding(8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (isDebt) "ዕዳ ተመዘገበ" else "ክፍያ ተፈጸመ",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = if (isDebt) AccentOrange else AccentGreen
-                                    )
-                                    if (tx.note != null) {
-                                        Text(text = tx.note, fontSize = 11.sp, color = Color.DarkGray)
-                                    }
-                                    Text(text = formatDate(tx.timestamp), fontSize = 9.sp, color = Color.Gray)
-                                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(transactions) { tx ->
+                        val isDebt = tx.type == "ዕዳ"
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (isDebt) AccentOrange.copy(alpha = 0.06f)
+                                    else AccentGreen.copy(alpha = 0.06f),
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "${if (isDebt) "+" else "-"}${formatCurrency(tx.amount)} Br",
+                                    text = if (isDebt) "ዕዳ ተመዘገበ" else "ክፍያ ተፈጸመ",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
+                                    fontSize = 13.sp,
                                     color = if (isDebt) AccentOrange else AccentGreen
                                 )
+                                if (tx.note != null) {
+                                    Text(text = tx.note, fontSize = 11.sp, color = Color.DarkGray)
+                                }
+                                Text(text = formatDate(tx.timestamp), fontSize = 12.sp, color = Color.Gray.copy(alpha = 0.8f))
                             }
+                            Text(
+                                text = "${if (isDebt) "+" else "-"}${formatCurrency(tx.amount)} Br",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = if (isDebt) AccentOrange else AccentGreen
+                            )
                         }
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("እሺ")
-                }
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("እሺ")
             }
         }
     }
@@ -2176,6 +2542,8 @@ fun CustomerTxDetailsDialog(
 
 @Composable
 fun AddExpenseDialog(
+    expenses: List<Expense>,
+    onDeleteExpense: (Expense) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (String, String, Double) -> Unit
 ) {
@@ -2186,92 +2554,129 @@ fun AddExpenseDialog(
     var selectedCategory by remember { mutableStateOf(categories[0]) }
     var showCategoryDropdown by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+    QuarterScreenBottomSheetDialog(onDismiss = onDismiss, scrollable = false) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "የእለት ወጪ መመዝገቢያ",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = AccentRed
-                )
-
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("የወጪው ርዕስ/ማብራሪያ") },
+            item {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = selectedCategory,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("የወጪ አይነት") },
-                        trailingIcon = {
-                            IconButton(onClick = { showCategoryDropdown = true }) {
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Category")
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = "የእለት ወጪ መመዝገቢያ",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = AccentRed
                     )
-                    DropdownMenu(
-                        expanded = showCategoryDropdown,
-                        onDismissRequest = { showCategoryDropdown = false },
-                        modifier = Modifier.fillMaxWidth(0.9f)
-                    ) {
-                        categories.forEach { cat ->
-                            DropdownMenuItem(
-                                text = { Text(cat) },
-                                onClick = {
-                                    selectedCategory = cat
-                                    showCategoryDropdown = false
+
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("የወጪው ርዕስ/ማብራሪያ") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = selectedCategory,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("የወጪ አይነት") },
+                            trailingIcon = {
+                                IconButton(onClick = { showCategoryDropdown = true }) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Category")
                                 }
-                            )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        DropdownMenu(
+                            expanded = showCategoryDropdown,
+                            onDismissRequest = { showCategoryDropdown = false },
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                        ) {
+                            categories.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(cat) },
+                                    onClick = {
+                                        selectedCategory = cat
+                                        showCategoryDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = amountStr,
+                        onValueChange = { amountStr = it },
+                        label = { Text("የገንዘብ መጠን (Birr)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text("ተመለስ", color = Color.Gray)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val amount = amountStr.toDoubleOrNull() ?: 0.0
+                                if (title.isNotBlank() && amount > 0) {
+                                    onConfirm(title, selectedCategory, amount)
+                                    // Clear form for continuous entries
+                                    title = ""
+                                    amountStr = ""
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                            enabled = title.isNotBlank() && (amountStr.toDoubleOrNull() ?: 0.0) > 0
+                        ) {
+                            Text("ወጪውን መዝግብ")
                         }
                     }
                 }
+            }
 
-                OutlinedTextField(
-                    value = amountStr,
-                    onValueChange = { amountStr = it },
-                    label = { Text("የገንዘብ መጠን (Birr)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "የተመዘገቡ ወጪዎች",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("ተመለስ", color = Color.Gray)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            val amount = amountStr.toDoubleOrNull() ?: 0.0
-                            if (title.isNotBlank() && amount > 0) {
-                                onConfirm(title, selectedCategory, amount)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
-                        enabled = title.isNotBlank() && (amountStr.toDoubleOrNull() ?: 0.0) > 0
+            if (expenses.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text("ወጪውን መዝግብ")
+                        Text("እስካሁን ምንም ወጪ አልተመዘገበም", color = Color.Gray, fontSize = 13.sp)
                     }
+                }
+            } else {
+                items(expenses) { expense ->
+                    ExpenseCard(expense = expense, onDelete = { onDeleteExpense(expense) })
                 }
             }
         }
@@ -2367,6 +2772,77 @@ fun AllHistoryDialog(
         list
     }
 
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedYear by remember { mutableStateOf("ሁሉም ዓመታት") }
+    var selectedMonth by remember { mutableStateOf("ሁሉም ወራት") }
+    var selectedDay by remember { mutableStateOf("ሁሉም ቀናት") }
+
+    val filteredHistory = remember(combinedHistory, searchQuery, selectedYear, selectedMonth, selectedDay) {
+        combinedHistory.filter { item ->
+            // 1. Text Search matching
+            val matchesSearch = if (searchQuery.isBlank()) {
+                true
+            } else {
+                val query = searchQuery.trim().lowercase()
+                when (item) {
+                    is HistoryItem.SaleItem -> {
+                        item.sale.itemName.lowercase().contains(query) ||
+                        (item.sale.customerName?.lowercase()?.contains(query) ?: false)
+                    }
+                    is HistoryItem.StockTxItem -> {
+                        item.itemName.lowercase().contains(query) ||
+                        (item.tx.note?.lowercase()?.contains(query) ?: false)
+                    }
+                    is HistoryItem.DebtTxItem -> {
+                        item.customerName.lowercase().contains(query) ||
+                        (item.tx.note?.lowercase()?.contains(query) ?: false)
+                    }
+                    is HistoryItem.ExpenseItem -> {
+                        item.expense.title.lowercase().contains(query) ||
+                        item.expense.category.lowercase().contains(query)
+                    }
+                }
+            }
+
+            // 2. Date Filtering matching (Day, Month, Year)
+            val matchesDate = if (selectedYear == "ሁሉም ዓመታት" && selectedMonth == "ሁሉም ወራት" && selectedDay == "ሁሉም ቀናት") {
+                true
+            } else {
+                val cal = Calendar.getInstance().apply { timeInMillis = item.timestamp }
+                val yearVal = cal.get(Calendar.YEAR)
+                val monthVal = cal.get(Calendar.MONTH) + 1 // 1-indexed
+                val dayVal = cal.get(Calendar.DAY_OF_MONTH)
+
+                val yearMatches = if (selectedYear == "ሁሉም ዓመታት") true else yearVal.toString() == selectedYear
+                val monthMatches = if (selectedMonth == "ሁሉም ወራት") {
+                    true
+                } else {
+                    val expectedMonthIndex = when (selectedMonth) {
+                        "ጥር (1)" -> 1
+                        "የካቲት (2)" -> 2
+                        "መጋቢት (3)" -> 3
+                        "ሚያዝያ (4)" -> 4
+                        "ግንቦት (5)" -> 5
+                        "ሰኔ (6)" -> 6
+                        "ሐምሌ (7)" -> 7
+                        "ነሐሴ (8)" -> 8
+                        "መስከረም (9)" -> 9
+                        "ጥቅምት (10)" -> 10
+                        "ኅዳር (11)" -> 11
+                        "ታኅሣሥ (12)" -> 12
+                        else -> 0
+                    }
+                    monthVal == expectedMonthIndex
+                }
+                val dayMatches = if (selectedDay == "ሁሉም ቀናት") true else dayVal.toString() == selectedDay
+
+                yearMatches && monthMatches && dayMatches
+            }
+
+            matchesSearch && matchesDate
+        }
+    }
+
     Dialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
         onDismissRequest = onDismiss
@@ -2404,27 +2880,148 @@ fun AllHistoryDialog(
                     }
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                if (combinedHistory.isEmpty()) {
+                // Search Box
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("ታሪክ መፈለጊያ (ስም/ማስታወሻ...)") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Date Selectors: Year, Month, Day
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Year Dropdown
+                    Box(modifier = Modifier.weight(1f)) {
+                        var expanded by remember { mutableStateOf(false) }
+                        OutlinedButton(
+                            onClick = { expanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                        ) {
+                            Text(selectedYear, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            DropdownMenuItem(text = { Text("ሁሉም ዓመታት", fontSize = 11.sp) }, onClick = { selectedYear = "ሁሉም ዓመታት"; expanded = false })
+                            listOf("2024", "2025", "2026", "2027", "2028").forEach { yr ->
+                                DropdownMenuItem(text = { Text(yr, fontSize = 11.sp) }, onClick = { selectedYear = yr; expanded = false })
+                            }
+                        }
+                    }
+
+                    // Month Dropdown
+                    Box(modifier = Modifier.weight(1.2f)) {
+                        var expanded by remember { mutableStateOf(false) }
+                        OutlinedButton(
+                            onClick = { expanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                        ) {
+                            Text(selectedMonth, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            DropdownMenuItem(text = { Text("ሁሉም ወራት", fontSize = 11.sp) }, onClick = { selectedMonth = "ሁሉም ወራት"; expanded = false })
+                            listOf(
+                                "ጥር (1)", "የካቲት (2)", "መጋቢት (3)", "ሚያዝያ (4)", "ግንቦት (5)", "ሰኔ (6)",
+                                "ሐምሌ (7)", "ነሐሴ (8)", "መስከረም (9)", "ጥቅምት (10)", "ኅዳር (11)", "ታኅሣሥ (12)"
+                            ).forEach { mo ->
+                                DropdownMenuItem(text = { Text(mo, fontSize = 11.sp) }, onClick = { selectedMonth = mo; expanded = false })
+                            }
+                        }
+                    }
+
+                    // Day Dropdown
+                    Box(modifier = Modifier.weight(1f)) {
+                        var expanded by remember { mutableStateOf(false) }
+                        OutlinedButton(
+                            onClick = { expanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                        ) {
+                            Text(selectedDay, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            DropdownMenuItem(text = { Text("ሁሉም ቀናት", fontSize = 11.sp) }, onClick = { selectedDay = "ሁሉም ቀናት"; expanded = false })
+                            (1..31).forEach { d ->
+                                DropdownMenuItem(text = { Text("$d", fontSize = 11.sp) }, onClick = { selectedDay = d.toString(); expanded = false })
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Reset filters if any are active
+                if (searchQuery.isNotEmpty() || selectedYear != "ሁሉም ዓመታት" || selectedMonth != "ሁሉም ወራት" || selectedDay != "ሁሉም ቀናት") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                searchQuery = ""
+                                selectedYear = "ሁሉም ዓመታት"
+                                selectedMonth = "ሁሉም ወራት"
+                                selectedDay = "ሁሉም ቀናት"
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("ማጣሪያዎቹን አጽዳ (Reset Filter)", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+                if (filteredHistory.isEmpty()) {
                     Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "ምንም የተመዘገበ ታሪክ የለም",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "ከተመረጡት ማጣሪያዎች ጋር የሚስማማ ታሪክ አልተገኘም",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TextButton(onClick = {
+                                searchQuery = ""
+                                selectedYear = "ሁሉም ዓመታት"
+                                selectedMonth = "ሁሉም ወራት"
+                                selectedDay = "ሁሉም ቀናት"
+                            }) {
+                                Text("ሁሉንም አሳይ")
+                            }
+                        }
                     }
                 } else {
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(combinedHistory) { item ->
+                        items(filteredHistory) { item ->
                             when (item) {
                                 is HistoryItem.SaleItem -> {
                                     HistoryCard(
                                         title = "ሽያጭ: ${item.sale.itemName}",
-                                        subtitle = "${formatQty(item.sale.quantity)} ${item.sale.unit} @ ${formatCurrency(item.sale.unitPrice)} Br",
+                                        subtitle = "${formatQty(item.sale.quantity)} ${item.sale.unit} @ የተሸጠበት: ${formatCurrency(item.sale.unitPrice)} Br (የተገዛበት: ${formatCurrency(item.sale.purchasePrice)} Br)",
                                         amount = "+${formatCurrency(item.sale.totalPrice)} Br",
                                         amountColor = AccentGreen,
                                         timestamp = item.sale.timestamp,
@@ -2538,7 +3135,7 @@ fun HistoryCard(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(text = subtitle, fontSize = 11.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(text = formatDate(timestamp), fontSize = 9.sp, color = Color.Gray.copy(alpha = 0.7f))
+                    Text(text = formatDate(timestamp), fontSize = 12.sp, color = Color.Gray.copy(alpha = 0.8f))
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
@@ -2756,4 +3353,69 @@ fun GuideAndThemeDialog(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QuarterScreenBottomSheetDialog(
+    onDismiss: () -> Unit,
+    scrollable: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "ተመለስ",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "ተመለስ",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 24.dp, vertical = 20.dp)
+                        .let { mod ->
+                            if (scrollable) mod.verticalScroll(rememberScrollState()) else mod
+                        },
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
 

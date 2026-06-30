@@ -13,7 +13,8 @@ data class Sale(
     val unitPrice: Double,
     val totalPrice: Double,
     val customerName: String? = null,
-    val isRubber: Boolean = false
+    val isRubber: Boolean = false,
+    val purchasePrice: Double = 0.0
 )
 
 @Entity(tableName = "inventory_items")
@@ -23,7 +24,8 @@ data class InventoryItem(
     val itemName: String,
     val quantity: Double, // Stock level
     val unit: String, // "ሜትር", "ቁጥር"
-    val minStockAlert: Double = 5.0
+    val minStockAlert: Double = 5.0,
+    val purchasePrice: Double = 0.0
 )
 
 @Entity(tableName = "stock_transactions")
