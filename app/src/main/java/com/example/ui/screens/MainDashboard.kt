@@ -51,6 +51,10 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.ui.viewmodel.BusinessViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,6 +66,19 @@ fun MainDashboard(
     // Dialog States
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
+    
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("abraham_decor_prefs", Context.MODE_PRIVATE) }
+
+    // Settings States
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var textScale by remember { mutableStateOf(sharedPrefs.getFloat("text_scale_multiplier", 1.0f)) }
+    var showHeroBanner by remember { mutableStateOf(sharedPrefs.getBoolean("show_hero_banner", true)) }
+    var showSummaryCards by remember { mutableStateOf(sharedPrefs.getBoolean("show_summary_cards", true)) }
+    var showHistoryBtn by remember { mutableStateOf(sharedPrefs.getBoolean("show_history_btn", true)) }
+    var showGuideBtn by remember { mutableStateOf(sharedPrefs.getBoolean("show_guide_btn", true)) }
+    var showAddSaleBtn by remember { mutableStateOf(sharedPrefs.getBoolean("show_add_sale_btn", true)) }
+    var showNoticeBanner by remember { mutableStateOf(sharedPrefs.getBoolean("show_notice_banner", true)) }
 
     // Tab States
     var selectedTab by remember { mutableStateOf(0) }
@@ -115,105 +132,129 @@ fun MainDashboard(
     val totalDebtOutstanding = customers.sumOf { it.totalDebt }
     val lowStockCount = inventoryItems.filter { it.quantity <= it.minStockAlert }.size
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "አብረሃም ዲኮር",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Abraham Car Decor & Accessories",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                        )
-                    }
-                },
-                actions = {
-                    if (lowStockCount > 0) {
-                        Badge(
-                            containerColor = AccentRed,
-                            contentColor = Color.White,
-                            modifier = Modifier.padding(end = 4.dp)
-                        ) {
-                            Text("$lowStockCount", modifier = Modifier.padding(2.dp), fontSize = 10.sp)
-                        }
-                    }
-                    IconButton(onClick = { showHistoryDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = "የስራ ታሪክ መዝገብ",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    IconButton(onClick = { showGuideDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "የአጠቃቀም መመሪያ እና ዲዛይን",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-                modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
-            ) {
-                tabNames.forEachIndexed { index, (label, icon) ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        icon = { Icon(icon, contentDescription = label) },
-                        label = {
+    val currentDensity = LocalDensity.current
+    val customDensity = remember(currentDensity, textScale) {
+        Density(
+            density = currentDensity.density,
+            fontScale = currentDensity.fontScale * textScale
+        )
+    }
+
+    CompositionLocalProvider(LocalDensity provides customDensity) {
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column {
                             Text(
-                                label,
-                                fontSize = 11.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                text = "አብረሃም ዲኮር",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
                             )
-                        },
-                        modifier = Modifier.testTag("tab_button_$index")
+                            Text(
+                                text = "Abraham Car Decor & Accessories",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                            )
+                        }
+                    },
+                    actions = {
+                        if (lowStockCount > 0) {
+                            Badge(
+                                containerColor = AccentRed,
+                                contentColor = Color.White,
+                                modifier = Modifier.padding(end = 4.dp)
+                            ) {
+                                Text("$lowStockCount", modifier = Modifier.padding(2.dp), fontSize = 10.sp)
+                            }
+                        }
+                        if (showHistoryBtn) {
+                            IconButton(onClick = { showHistoryDialog = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = "የስራ ታሪክ መዝገብ",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        if (showGuideBtn) {
+                            IconButton(onClick = { showGuideDialog = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "የአጠቃቀም መመሪያ እና ዲዛይን",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        IconButton(onClick = { showSettingsDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "ማስተካከያ (Settings)",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                )
+            },
+            bottomBar = {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 8.dp,
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                ) {
+                    tabNames.forEachIndexed { index, (label, icon) ->
+                        NavigationBarItem(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            icon = { Icon(icon, contentDescription = label) },
+                            label = {
+                                Text(
+                                    label,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            modifier = Modifier.testTag("tab_button_$index")
+                        )
+                    }
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                // Interactive Hero Welcome Banner & Style Selector
+                if (showHeroBanner) {
+                    DashboardHeroBanner(
+                        currentTheme = currentTheme,
+                        onThemeChange = onThemeChange
                     )
                 }
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            // Interactive Hero Welcome Banner & Style Selector
-            DashboardHeroBanner(
-                currentTheme = currentTheme,
-                onThemeChange = onThemeChange
-            )
 
-            // Summary Cards Block (Universal Header)
-            SummaryDashboardRow(
-                todaySales = todaySalesTotal,
-                todayExpenses = todayExpensesTotal,
-                outstandingDebt = totalDebtOutstanding,
-                lowStockCount = lowStockCount,
-                currentTheme = currentTheme,
-                todaySalesRaw = todaySalesRaw,
-                todayExpensesRaw = todayExpensesRaw,
-                todayDebtRegistered = todayDebtRegistered,
-                todayDebtPaid = todayDebtPaid
-            )
+                // Summary Cards Block (Universal Header)
+                if (showSummaryCards) {
+                    SummaryDashboardRow(
+                        todaySales = todaySalesTotal,
+                        todayExpenses = todayExpensesTotal,
+                        outstandingDebt = totalDebtOutstanding,
+                        lowStockCount = lowStockCount,
+                        currentTheme = currentTheme,
+                        todaySalesRaw = todaySalesRaw,
+                        todayExpensesRaw = todayExpensesRaw,
+                        todayDebtRegistered = todayDebtRegistered,
+                        todayDebtPaid = todayDebtPaid
+                    )
+                }
 
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f),
@@ -234,7 +275,9 @@ fun MainDashboard(
                         onAddSale = { name, qty, unit, sellPrice, cust ->
                             viewModel.addSale(itemName = name, quantity = qty, unit = unit, unitPrice = sellPrice, customerName = cust, isRubber = false)
                         },
-                        onDeleteSale = { viewModel.deleteSale(it) }
+                        onDeleteSale = { viewModel.deleteSale(it) },
+                        showAddBtn = showAddSaleBtn,
+                        showNoticeBanner = showNoticeBanner
                     )
                     1 -> InventoryScreen(
                         items = inventoryItems,
@@ -264,7 +307,8 @@ fun MainDashboard(
                         onAddRubberSale = { name, qty, sellPrice, cust ->
                             viewModel.addSale(itemName = name, quantity = qty, unit = "ሜትር", unitPrice = sellPrice, customerName = cust, isRubber = true)
                         },
-                        onDeleteSale = { viewModel.deleteSale(it) }
+                        onDeleteSale = { viewModel.deleteSale(it) },
+                        showAddBtn = showAddSaleBtn
                     )
                     4 -> ExpensesScreen(
                         expenses = expenses,
@@ -297,6 +341,50 @@ fun MainDashboard(
             onThemeChange = onThemeChange,
             onDismiss = { showGuideDialog = false }
         )
+    }
+
+    if (showSettingsDialog) {
+        SettingsDialog(
+            currentTheme = currentTheme,
+            onThemeChange = onThemeChange,
+            textScale = textScale,
+            onTextScaleChange = { newScale ->
+                textScale = newScale
+                sharedPrefs.edit().putFloat("text_scale_multiplier", newScale).apply()
+            },
+            showHeroBanner = showHeroBanner,
+            onShowHeroBannerChange = { newVal ->
+                showHeroBanner = newVal
+                sharedPrefs.edit().putBoolean("show_hero_banner", newVal).apply()
+            },
+            showSummaryCards = showSummaryCards,
+            onShowSummaryCardsChange = { newVal ->
+                showSummaryCards = newVal
+                sharedPrefs.edit().putBoolean("show_summary_cards", newVal).apply()
+            },
+            showHistoryBtn = showHistoryBtn,
+            onShowHistoryBtnChange = { newVal ->
+                showHistoryBtn = newVal
+                sharedPrefs.edit().putBoolean("show_history_btn", newVal).apply()
+            },
+            showGuideBtn = showGuideBtn,
+            onShowGuideBtnChange = { newVal ->
+                showGuideBtn = newVal
+                sharedPrefs.edit().putBoolean("show_guide_btn", newVal).apply()
+            },
+            showAddSaleBtn = showAddSaleBtn,
+            onShowAddSaleBtnChange = { newVal ->
+                showAddSaleBtn = newVal
+                sharedPrefs.edit().putBoolean("show_add_sale_btn", newVal).apply()
+            },
+            showNoticeBanner = showNoticeBanner,
+            onShowNoticeBannerChange = { newVal ->
+                showNoticeBanner = newVal
+                sharedPrefs.edit().putBoolean("show_notice_banner", newVal).apply()
+            },
+            onDismiss = { showSettingsDialog = false }
+        )
+    }
     }
 }
 
@@ -653,7 +741,9 @@ fun DailySalesScreen(
     sales: List<Sale>,
     inventory: List<InventoryItem>,
     onAddSale: (String, Double, String, Double, String?) -> Unit,
-    onDeleteSale: (Sale) -> Unit
+    onDeleteSale: (Sale) -> Unit,
+    showAddBtn: Boolean = true,
+    showNoticeBanner: Boolean = true
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
 
@@ -672,33 +762,37 @@ fun DailySalesScreen(
                     Text("Daily Accessories & Labor Sales", fontSize = 12.sp, color = Color.Gray)
                 }
 
-                Button(
-                    onClick = { showAddDialog = true },
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.testTag("add_sale_button")
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("ሽያጭ መዝግብ", fontSize = 13.sp)
+                if (showAddBtn) {
+                    Button(
+                        onClick = { showAddDialog = true },
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag("add_sale_button")
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add")
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("ሽያጭ መዝግብ", fontSize = 13.sp)
+                    }
                 }
             }
 
             // Linkage notice banner
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (showNoticeBanner) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
                 ) {
-                    Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        "የሽያጭ ዕቃ ስም በመጋዘን ካለው ጋር ሲመሳሰል ክምችት በራሱ ይቀንሳል!",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
-                    )
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "የሽያጭ ዕቃ ስም በመጋዘን ካለው ጋር ሲመሳሰል ክምችት በራሱ ይቀንሳል!",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                        )
+                    }
                 }
             }
 
@@ -1416,7 +1510,8 @@ fun RubberSalesScreen(
     sales: List<Sale>,
     inventory: List<InventoryItem>,
     onAddRubberSale: (String, Double, Double, String?) -> Unit,
-    onDeleteSale: (Sale) -> Unit
+    onDeleteSale: (Sale) -> Unit,
+    showAddBtn: Boolean = true
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
 
@@ -1437,15 +1532,17 @@ fun RubberSalesScreen(
                 Text("Rubber strips & Sealants (Sold per Meter)", fontSize = 12.sp, color = Color.Gray)
             }
 
-            Button(
-                onClick = { showAddDialog = true },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                modifier = Modifier.testTag("add_rubber_sale_button")
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add")
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("ጎማ ሽያጭ", fontSize = 13.sp)
+            if (showAddBtn) {
+                Button(
+                    onClick = { showAddDialog = true },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.testTag("add_rubber_sale_button")
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("ጎማ ሽያጭ", fontSize = 13.sp)
+                }
             }
         }
 
@@ -3417,5 +3514,380 @@ fun QuarterScreenBottomSheetDialog(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsDialog(
+    currentTheme: AppThemeStyle,
+    onThemeChange: (AppThemeStyle) -> Unit,
+    textScale: Float,
+    onTextScaleChange: (Float) -> Unit,
+    showHeroBanner: Boolean,
+    onShowHeroBannerChange: (Boolean) -> Unit,
+    showSummaryCards: Boolean,
+    onShowSummaryCardsChange: (Boolean) -> Unit,
+    showHistoryBtn: Boolean,
+    onShowHistoryBtnChange: (Boolean) -> Unit,
+    showGuideBtn: Boolean,
+    onShowGuideBtnChange: (Boolean) -> Unit,
+    showAddSaleBtn: Boolean,
+    onShowAddSaleBtnChange: (Boolean) -> Unit,
+    showNoticeBanner: Boolean,
+    onShowNoticeBannerChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding()
+            ) {
+                // Custom Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "ዝጋ",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "የመተግበሪያ ማስተካከያ (Settings)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                // Scrollable content
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    // Section 1: Font and number size changer
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.TextFields,
+                                    contentDescription = "Font Size",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "1. የጽሑፍ እና ቁጥሮች መጠን (Font Size)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // Text scale options
+                            val scaleOptions = listOf(
+                                Triple(0.85f, "አነስተኛ (Small)", "85%"),
+                                Triple(1.0f, "መደበኛ (Normal)", "100%"),
+                                Triple(1.15f, "ትልቅ (Large)", "115%"),
+                                Triple(1.3f, "በጣም ትልቅ (Extra Large)", "130%")
+                            )
+
+                            scaleOptions.forEach { (scale, label, percent) ->
+                                val isSelected = textScale == scale
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onTextScaleChange(scale) }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        RadioButton(
+                                            selected = isSelected,
+                                            onClick = { onTextScaleChange(scale) }
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = label,
+                                            fontSize = 14.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                    Text(
+                                        text = percent,
+                                        fontSize = 12.sp,
+                                        color = Color.Gray,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            // Preview text
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "የፊደል መጠን ቅድመ-እይታ (Live Preview):",
+                                        fontSize = 11.sp,
+                                        color = Color.Gray
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "አብረሃም ዲኮር - 123,456.00 ብር",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Section 2: UI Design Theme Selector
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Palette,
+                                    contentDescription = "Themes",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "2. የመተግበሪያው ዲዛይን ቀለም (UI Themes)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            AppThemeStyle.values().forEach { style ->
+                                val isSelected = currentTheme == style
+                                val accentColor = when (style) {
+                                    AppThemeStyle.CLASSIC_GOLD -> Color(0xFFFFB703)
+                                    AppThemeStyle.NEON_RACER -> Color(0xFF00FFCC)
+                                    AppThemeStyle.ROYAL_CARBON -> Color(0xFF2E6FF2)
+                                    AppThemeStyle.LUXURY_LEATHER -> Color(0xFFC68B59)
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                            else Color.Transparent
+                                        )
+                                        .clickable { onThemeChange(style) }
+                                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .background(accentColor, RoundedCornerShape(8.dp))
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                text = style.amharicName,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp
+                                            )
+                                            Text(
+                                                text = style.displayName,
+                                                fontSize = 11.sp,
+                                                color = Color.Gray
+                                            )
+                                        }
+                                    }
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = { onThemeChange(style) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Section 3: Dashboard Element Visibility Control
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Visibility,
+                                    contentDescription = "Visibility",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "3. የዳሽቦርድ ማሳያ ምርጫዎች (Show/Hide Elements)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            val toggles = listOf(
+                                ToggleItem("የጀርባ ምስል ባነር (Welcome Banner)", showHeroBanner, onShowHeroBannerChange),
+                                ToggleItem("የእለት መረጃዎች (Summary Statistics Cards)", showSummaryCards, onShowSummaryCardsChange),
+                                ToggleItem("የታሪክ ቁልፍ በራስጌ (History Icon Button)", showHistoryBtn, onShowHistoryBtnChange),
+                                ToggleItem("የመመሪያ ቁልፍ በራስጌ (Guide Icon Button)", showGuideBtn, onShowGuideBtnChange),
+                                ToggleItem("የሽያጭ መመዝገቢያ ቁልፎች (Add Entry Buttons)", showAddSaleBtn, onShowAddSaleBtnChange),
+                                ToggleItem("የክምችት ማሳሰቢያ ፅሁፍ (Stock Linkage Notice)", showNoticeBanner, onShowNoticeBannerChange)
+                            )
+
+                            toggles.forEach { item ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { item.onCheckedChange(!item.checked) }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = item.label,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Switch(
+                                        checked = item.checked,
+                                        onCheckedChange = item.onCheckedChange
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Section 4: About App/Instruction section
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "About",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "4. ስለ መተግበሪያው አሰራር (About App)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = "አብረሃም ዲኮር መተግበሪያ (Abraham Car Decor Management System) ለመኪና ማሸብረቂያ እና መለዋወጫ መሸጫ መደብር የተዘጋጀ ዘመናዊ የሽያጭ እና ክምችት መቆጣጠሪያ ሲስተም ነው።",
+                                fontSize = 13.sp,
+                                lineHeight = 19.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = "📌 ዋና ዋና ተግባራት:",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            val points = listOf(
+                                "• **ክምችት መቆጣጠር**: በመጋዘን ያሉ ዕቃዎችን በክምችት መጠን እና በአነስተኛ ደህንነት ወሰን ይከታተላል።",
+                                "• **እዳና ክፍያ**: የደንበኞችን ዕዳ በስም መዝግቦ የእለት ክፍያዎችን በራስ-ሰር ደምሮ ያስተካክላል።",
+                                "• **የጎማ ሽያጭ**: የጎማ ሽያጮችን በሜትር በቀላሉ ያሰላል።",
+                                "• **ታሪክ መዝገብ**: ሁሉንም ክንውኖች ሙሉ ታሪክ በሰከንድ ያስቀምጣል።"
+                            )
+
+                            points.forEach { pt ->
+                                Text(
+                                    text = pt,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp,
+                                    modifier = Modifier.padding(vertical = 2.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                                    .padding(10.dp)
+                            ) {
+                                Text(
+                                    text = "ስሪት (Version): 1.0.0\nየተገነባው ለ: አብረሃም ካር ዲኮር እና መለዋወጫ",
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class ToggleItem(
+    val label: String,
+    val checked: Boolean,
+    val onCheckedChange: (Boolean) -> Unit
+)
 
 
