@@ -956,7 +956,22 @@ fun DashboardHeroBanner(
                                 )
                             )
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "+251911029070",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            style = androidx.compose.ui.text.TextStyle(
+                                shadow = androidx.compose.ui.graphics.Shadow(
+                                    color = Color.Black,
+                                    offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                                    blurRadius = 3f
+                                )
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
                             text = "የእለት ሽያጭ፣ መጋዘን እና የዕዳ መከታተያ ሲስተም",
                             color = Color.White.copy(alpha = 0.9f),
