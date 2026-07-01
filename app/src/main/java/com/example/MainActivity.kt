@@ -56,13 +56,16 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            var isUnlocked by remember { mutableStateOf(false) }
+            var isUnlocked by remember { 
+                mutableStateOf(sharedPrefs.getBoolean("is_app_unlocked", false)) 
+            }
             
             AbrahamDecorTheme(themeStyle = currentTheme) {
                 if (!isUnlocked) {
                     AppLockScreen(
                         onUnlockSuccess = {
                             isUnlocked = true
+                            sharedPrefs.edit().putBoolean("is_app_unlocked", true).apply()
                         }
                     )
                 } else {

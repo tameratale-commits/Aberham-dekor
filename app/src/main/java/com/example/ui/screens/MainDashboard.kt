@@ -3,6 +3,10 @@ package com.example.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.scale
@@ -88,6 +92,8 @@ fun MainDashboard(
     var showGuideBtn by remember { mutableStateOf(sharedPrefs.getBoolean("show_guide_btn", true)) }
     var showAddSaleBtn by remember { mutableStateOf(sharedPrefs.getBoolean("show_add_sale_btn", true)) }
     var showNoticeBanner by remember { mutableStateOf(sharedPrefs.getBoolean("show_notice_banner", true)) }
+    var deletionPasscode by remember { mutableStateOf(sharedPrefs.getString("deletion_passcode", "1234") ?: "1234") }
+    var isHeaderExpanded by remember { mutableStateOf(true) }
 
     // Tab States
     var selectedTab by remember { mutableStateOf(0) }
@@ -266,37 +272,109 @@ fun MainDashboard(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                // Interactive Hero Welcome Banner & Style Selector
-                if (showHeroBanner) {
-                    DashboardHeroBanner(
-                        currentTheme = currentTheme,
-                        onThemeChange = onThemeChange
-                    )
+                // Collapsible Header Wrapper
+                AnimatedVisibility(
+                    visible = isHeaderExpanded,
+                    enter = expandVertically(animationSpec = tween(500)) + fadeIn(animationSpec = tween(400)),
+                    exit = shrinkVertically(animationSpec = tween(500)) + fadeOut(animationSpec = tween(400))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    if (dragAmount < -10f) {
+                                        isHeaderExpanded = false
+                                    }
+                                }
+                            }
+                    ) {
+                        // Interactive Hero Welcome Banner & Style Selector
+                        if (showHeroBanner) {
+                            DashboardHeroBanner(
+                                currentTheme = currentTheme,
+                                onThemeChange = onThemeChange
+                            )
+                        }
+
+                        // Summary Cards Block (Universal Header)
+                        if (showSummaryCards) {
+                            SummaryDashboardRow(
+                                todaySales = todaySalesTotal,
+                                todayExpenses = todayExpensesTotal,
+                                outstandingDebt = totalDebtOutstanding,
+                                lowStockCount = lowStockCount,
+                                currentTheme = currentTheme,
+                                todaySalesRaw = todaySalesRaw,
+                                todayExpensesRaw = todayExpensesRaw,
+                                todayDebtRegistered = todayDebtRegistered,
+                                todayDebtPaid = todayDebtPaid,
+                                totalInventoryAsset = totalInventoryAsset,
+                                weeklySales = weeklySales,
+                                monthlySales = monthlySales
+                            )
+                        }
+                    }
                 }
 
-                // Summary Cards Block (Universal Header)
-                if (showSummaryCards) {
-                    SummaryDashboardRow(
-                        todaySales = todaySalesTotal,
-                        todayExpenses = todayExpensesTotal,
-                        outstandingDebt = totalDebtOutstanding,
-                        lowStockCount = lowStockCount,
-                        currentTheme = currentTheme,
-                        todaySalesRaw = todaySalesRaw,
-                        todayExpensesRaw = todayExpensesRaw,
-                        todayDebtRegistered = todayDebtRegistered,
-                        todayDebtPaid = todayDebtPaid,
-                        totalInventoryAsset = totalInventoryAsset,
-                        weeklySales = weeklySales,
-                        monthlySales = monthlySales
-                    )
+                // Interactive Drag / Pull Handle to Expand or Collapse the Dashboard Header
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        .clickable { isHeaderExpanded = !isHeaderExpanded }
+                        .padding(vertical = 4.dp)
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures { change, dragAmount ->
+                                change.consume()
+                                if (dragAmount < -8f) {
+                                    isHeaderExpanded = false
+                                } else if (dragAmount > 8f) {
+                                    isHeaderExpanded = true
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        // Drag Handle Line indicator
+                        Box(
+                            modifier = Modifier
+                                .width(36.dp)
+                                .height(4.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.25f),
+                                    shape = RoundedCornerShape(2.dp)
+                                )
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isHeaderExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (isHeaderExpanded) "ደብቅ" else "ዘርጋ",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isHeaderExpanded) "የዳሽቦርድ መረጃዎችን ደብቅ (ለማሳነስ ወደላይ ይሳቡ / ይጫኑ)" else "የዳሽቦርድ መረጃዎችን ዘርጋ (ለመዘርጋት ወደታች ይሳቡ / ይጫኑ)",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
 
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f),
-                thickness = 1.dp,
-                modifier = Modifier.padding(vertical = 2.dp)
-            )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
 
             // Switch Screen Contents Based on Selected Tab
             Box(
@@ -458,6 +536,11 @@ fun MainDashboard(
                 showNoticeBanner = newVal
                 sharedPrefs.edit().putBoolean("show_notice_banner", newVal).apply()
             },
+            deletionPasscode = deletionPasscode,
+            onDeletionPasscodeChange = { newPass ->
+                deletionPasscode = newPass
+                sharedPrefs.edit().putString("deletion_passcode", newPass).apply()
+            },
             onDismiss = { showSettingsDialog = false }
         )
     }
@@ -489,12 +572,12 @@ fun MainDashboard(
             text = {
                 Column {
                     Text(
-                        text = "ይህንን መረጃ በቋሚነት ለማጥፋት እባክዎ ባለ 4 አሃዝ የይለፉ ቃል ያስገቡ።",
+                        text = "ይህንን መረጃ በቋሚነት ለማጥፋት እባክዎ የይለፉ ቃል ያስገቡ።",
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "(ነባሪ የይለፉ ቃል: 1234)",
+                        text = if (deletionPasscode == "1234") "(ነባሪ የይለፉ ቃል: 1234)" else "(የተቀየረ የይለፉ ቃል)",
                         fontSize = 12.sp,
                         color = Color.Gray,
                         fontWeight = FontWeight.Medium
@@ -503,13 +586,13 @@ fun MainDashboard(
                     OutlinedTextField(
                         value = enteredPasscode,
                         onValueChange = {
-                            if (it.length <= 4 && it.all { char -> char.isDigit() }) {
+                            if (it.length <= 8) {
                                 enteredPasscode = it
                                 isError = false
                             }
                         },
                         label = { Text("የይለፉ ቃል (Passcode)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         singleLine = true,
                         isError = isError,
                         visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
@@ -528,7 +611,7 @@ fun MainDashboard(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (enteredPasscode == "1234") {
+                        if (enteredPasscode == deletionPasscode) {
                             val item = itemToDelete
                             when (deleteActionType) {
                                 "SALE" -> if (item is Sale) viewModel.deleteSale(item)
@@ -2171,9 +2254,17 @@ fun AddSaleDialog(
                             value = itemName,
                             onValueChange = {
                                 itemName = it
-                                showInventoryDropdown = it.isNotEmpty() && matchingItems.isNotEmpty()
+                                showInventoryDropdown = matchingItems.isNotEmpty()
                             },
                             label = { Text("የዕቃው/የአገልግሎቱ ስም") },
+                            trailingIcon = {
+                                IconButton(onClick = { showInventoryDropdown = !showInventoryDropdown }) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = "ከመጋዘን ምረጥ"
+                                    )
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -2191,7 +2282,7 @@ fun AddSaleDialog(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            matchingItems.take(4).forEach { invItem ->
+                            matchingItems.take(20).forEach { invItem ->
                                 DropdownMenuItem(
                                     text = { Text("${invItem.itemName} (ክምችት: ${formatQty(invItem.quantity)} ${invItem.unit})") },
                                     onClick = {
@@ -3911,6 +4002,8 @@ fun SettingsDialog(
     onShowAddSaleBtnChange: (Boolean) -> Unit,
     showNoticeBanner: Boolean,
     onShowNoticeBannerChange: (Boolean) -> Unit,
+    deletionPasscode: String,
+    onDeletionPasscodeChange: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(
@@ -4176,7 +4269,90 @@ fun SettingsDialog(
                         }
                     }
 
-                    // Section 4: About App/Instruction section
+                    // Section 4: Deletion Passcode Changer
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Passcode Change",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "4. መረጃዎችን ለመሰረዝ የሚጠየቅ የይለፍ ቃል",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            var tempPasscode by remember { mutableStateOf(deletionPasscode) }
+                            var showPassError by remember { mutableStateOf(false) }
+                            var showSuccessMsg by remember { mutableStateOf(false) }
+
+                            OutlinedTextField(
+                                value = tempPasscode,
+                                onValueChange = {
+                                    if (it.length <= 8) {
+                                        tempPasscode = it
+                                        showPassError = false
+                                        showSuccessMsg = false
+                                    }
+                                },
+                                label = { Text("አዲስ የይለፍ ቃል") },
+                                placeholder = { Text("ለምሳሌ፡ 1234") },
+                                singleLine = true,
+                                isError = showPassError,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            
+                            if (showPassError) {
+                                Text(
+                                    text = "እባክዎ ትክክለኛ የይለፍ ቃል ያስገቡ (ባዶ መሆን የለበትም)",
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                            
+                            if (showSuccessMsg) {
+                                Text(
+                                    text = "የይለፍ ቃሉ በተሳካ ሁኔታ ተቀይሯል!",
+                                    color = Color(0xFF4CAF50),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            Button(
+                                onClick = {
+                                    if (tempPasscode.trim().isNotEmpty()) {
+                                        onDeletionPasscodeChange(tempPasscode.trim())
+                                        showSuccessMsg = true
+                                        showPassError = false
+                                    } else {
+                                        showPassError = true
+                                        showSuccessMsg = false
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("የይለፍ ቃል ቀይር (Save New Password)")
+                            }
+                        }
+                    }
+
+                    // Section 5: About App/Instruction section
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -4191,7 +4367,7 @@ fun SettingsDialog(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "4. ስለ መተግበሪያው አሰራር (About App)",
+                                    text = "5. ስለ መተግበሪያው አሰራር (About App)",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
                                     color = MaterialTheme.colorScheme.primary

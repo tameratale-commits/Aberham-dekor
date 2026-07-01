@@ -98,7 +98,15 @@ class BusinessViewModel(application: Application) : AndroidViewModel(application
             val trimmedName = itemName.trim()
             // Auto Stock Deduction & Find Purchase Price (If matches inventory item name)
             val items = repository.allInventoryItems.first()
-            val matchingItem = items.find { it.itemName.trim().equals(trimmedName, ignoreCase = true) }
+            var matchingItem = items.find { it.itemName.trim().equals(trimmedName, ignoreCase = true) }
+            
+            // Fallback to partial match if exact match not found
+            if (matchingItem == null) {
+                matchingItem = items.find {
+                    it.itemName.trim().contains(trimmedName, ignoreCase = true) ||
+                    trimmedName.contains(it.itemName.trim(), ignoreCase = true)
+                }
+            }
             val determinedPurchasePrice = matchingItem?.purchasePrice ?: 0.0
 
             if (matchingItem != null) {
