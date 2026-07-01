@@ -4292,9 +4292,49 @@ fun SettingsDialog(
                             }
                             Spacer(modifier = Modifier.height(12.dp))
                             
-                            var tempPasscode by remember { mutableStateOf(deletionPasscode) }
+                            var oldPasscodeEntered by remember { mutableStateOf("") }
+                            var tempPasscode by remember { mutableStateOf("") }
+                            var oldPassError by remember { mutableStateOf("") }
                             var showPassError by remember { mutableStateOf(false) }
                             var showSuccessMsg by remember { mutableStateOf(false) }
+                            var isOldPasswordVisible by remember { mutableStateOf(false) }
+                            var isPasswordVisible by remember { mutableStateOf(false) }
+
+                            OutlinedTextField(
+                                value = oldPasscodeEntered,
+                                onValueChange = {
+                                    if (it.length <= 8) {
+                                        oldPasscodeEntered = it
+                                        oldPassError = ""
+                                        showSuccessMsg = false
+                                    }
+                                },
+                                label = { Text("የቀድሞው የይለፍ ቃል (Current Passcode)") },
+                                placeholder = { Text("የድሮውን ያስገቡ") },
+                                singleLine = true,
+                                isError = oldPassError.isNotEmpty(),
+                                visualTransformation = if (isOldPasswordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                trailingIcon = {
+                                    val image = if (isOldPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                                    val description = if (isOldPasswordVisible) "ደብቅ" else "አሳይ"
+                                    IconButton(onClick = { isOldPasswordVisible = !isOldPasswordVisible }) {
+                                        Icon(imageVector = image, contentDescription = description)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            if (oldPassError.isNotEmpty()) {
+                                Text(
+                                    text = oldPassError,
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
 
                             OutlinedTextField(
                                 value = tempPasscode,
@@ -4305,10 +4345,19 @@ fun SettingsDialog(
                                         showSuccessMsg = false
                                     }
                                 },
-                                label = { Text("አዲስ የይለፍ ቃል") },
-                                placeholder = { Text("ለምሳሌ፡ 1234") },
+                                label = { Text("አዲስ የይለፍ ቃል (New Passcode)") },
+                                placeholder = { Text("አዲሱን ያስገቡ") },
                                 singleLine = true,
                                 isError = showPassError,
+                                visualTransformation = if (isPasswordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                trailingIcon = {
+                                    val image = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                                    val description = if (isPasswordVisible) "ደብቅ" else "አሳይ"
+                                    IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                                        Icon(imageVector = image, contentDescription = description)
+                                    }
+                                },
                                 modifier = Modifier.fillMaxWidth()
                             )
                             
@@ -4335,13 +4384,19 @@ fun SettingsDialog(
                             
                             Button(
                                 onClick = {
-                                    if (tempPasscode.trim().isNotEmpty()) {
+                                    if (oldPasscodeEntered != deletionPasscode) {
+                                        oldPassError = "የገባው የቀድሞው የይለፍ ቃል ትክክል አይደለም!"
+                                        showSuccessMsg = false
+                                    } else if (tempPasscode.trim().isEmpty()) {
+                                        showPassError = true
+                                        showSuccessMsg = false
+                                    } else {
                                         onDeletionPasscodeChange(tempPasscode.trim())
                                         showSuccessMsg = true
                                         showPassError = false
-                                    } else {
-                                        showPassError = true
-                                        showSuccessMsg = false
+                                        oldPassError = ""
+                                        tempPasscode = ""
+                                        oldPasscodeEntered = ""
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),

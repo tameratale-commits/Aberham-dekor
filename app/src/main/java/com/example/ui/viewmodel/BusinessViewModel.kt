@@ -1,6 +1,8 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -39,6 +41,41 @@ class BusinessViewModel(application: Application) : AndroidViewModel(application
             customerDao = database.customerDao(),
             expenseDao = database.expenseDao()
         )
+    }
+
+    private var tts: TextToSpeech? = null
+
+    init {
+        try {
+            tts = TextToSpeech(application) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    tts?.language = Locale("am") ?: Locale.US
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun speakOut(text: String) {
+        // 1. Play standard alarm beep
+        playWarningSound()
+        // 2. Play TTS warning
+        try {
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "WarningTTS")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        try {
+            tts?.stop()
+            tts?.shutdown()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     // Expose Data Flows
@@ -107,21 +144,25 @@ class BusinessViewModel(application: Application) : AndroidViewModel(application
                     trimmedName.contains(it.itemName.trim(), ignoreCase = true)
                 }
             }
-            val determinedPurchasePrice = matchingItem?.purchasePrice ?: 0.0
 
-            if (matchingItem != null) {
-                // Check if selling quantity exceeds available warehouse stock
-                if (quantity > matchingItem.quantity) {
-                    playWarningSound()
-                    _message.value = "ስህተት፡ የተሸጠው መጠን ($quantity) መጋዘን ውስጥ ካለው ክምችት (${matchingItem.quantity}) ይበልጣል! ማስገባት አይቻልም።"
-                    return@launch
-                }
-                // Check if selling price is below purchase price
-                if (unitPrice < matchingItem.purchasePrice) {
-                    playWarningSound()
-                    _message.value = "ስህተት፡ የተሸጠበት ዋጋ (${unitPrice} Br) እቃው ከተገዛበት ዋጋ (${matchingItem.purchasePrice} Br) በታች ነው! ማስገባት አይቻልም።"
-                    return@launch
-                }
+            if (matchingItem == null) {
+                _message.value = "ስህተት፡ ይህ እቃ መጋዘን ውስጥ አልተመዘገበም! (መጋዘን የለም)"
+                speakOut("መጋዘን የለም")
+                return@launch
+            }
+
+            // Check if selling quantity exceeds available warehouse stock
+            if (quantity > matchingItem.quantity) {
+                _message.value = "ስህተት፡ የተሸጠው መጠን ($quantity) መጋዘን ውስጥ ካለው ክምችት (${matchingItem.quantity}) ይበልጣል!"
+                speakOut("መጋዘን የለም")
+                return@launch
+            }
+
+            // Check if selling price is below purchase price
+            if (unitPrice < matchingItem.purchasePrice) {
+                _message.value = "ስህተት፡ የተሸጠበት ዋጋ (${unitPrice} Br) ከተገዛበት ዋጋ (${matchingItem.purchasePrice} Br) በታች ነው! (ካዋጋ በታች ነው)"
+                speakOut("ካዋጋ በታች ነው")
+                return@launch
             }
 
             val totalPrice = quantity * unitPrice
@@ -130,24 +171,20 @@ class BusinessViewModel(application: Application) : AndroidViewModel(application
                 quantity = quantity,
                 unit = unit,
                 unitPrice = unitPrice,
-                purchasePrice = determinedPurchasePrice,
+                purchasePrice = matchingItem.purchasePrice,
                 totalPrice = totalPrice,
                 customerName = if (customerName?.isNotBlank() == true) customerName else null,
                 isRubber = isRubber
             )
             repository.insertSale(sale)
 
-            if (matchingItem != null) {
-                repository.adjustStock(
-                    itemId = matchingItem.id,
-                    type = "ወጭ",
-                    quantity = quantity,
-                    note = "በሽያጭ የተቀነሰ (${if (isRubber) "የጎማ ሽያጭ" else "የእለት ሽያጭ"})"
-                )
-                _message.value = "ሽያጭ ተመዝግቧል። የመጋዘን ክምችት በ ${quantity} $unit ቀንሷል።"
-            } else {
-                _message.value = "ሽያጭ በተሳካ ሁኔታ ተመዝግቧል"
-            }
+            repository.adjustStock(
+                itemId = matchingItem.id,
+                type = "ወጭ",
+                quantity = quantity,
+                note = "በሽያጭ የተቀነሰ (${if (isRubber) "የጎማ ሽያጭ" else "የእለት ሽያጭ"})"
+            )
+            _message.value = "ሽያጭ ተመዝግቧል። የመጋዘን ክምችት በ ${quantity} $unit ቀንሷል።"
 
             // Auto Debt Creation if Customer specified and not paid fully
             // For now we assume if they select a customer name, we can ask if they want to put it as debt.
