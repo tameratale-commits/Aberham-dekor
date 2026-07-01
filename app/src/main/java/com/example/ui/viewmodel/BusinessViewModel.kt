@@ -241,6 +241,20 @@ class BusinessViewModel(application: Application) : AndroidViewModel(application
             _message.value = "ወጪው ተሰርዟል"
         }
     }
+
+    fun deleteStockTransaction(tx: com.example.data.model.StockTransaction) {
+        viewModelScope.launch {
+            repository.deleteStockTransaction(tx)
+            _message.value = "የመጋዘን እንቅስቃሴ ታሪክ ተሰርዟል"
+        }
+    }
+
+    fun deleteDebtTransaction(tx: com.example.data.model.DebtTransaction) {
+        viewModelScope.launch {
+            repository.deleteDebtTransaction(tx)
+            _message.value = "የዕዳ መዝገብ ታሪክ ተሰርዟል"
+        }
+    }
 }
 
 class BusinessViewModelFactory(private val application: Application) : ViewModelProvider.Factory {

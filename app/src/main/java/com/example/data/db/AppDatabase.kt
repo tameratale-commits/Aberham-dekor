@@ -55,6 +55,9 @@ interface InventoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStockTransaction(tx: StockTransaction)
 
+    @Delete
+    suspend fun deleteStockTransaction(tx: StockTransaction)
+
     @Query("SELECT * FROM stock_transactions WHERE itemId = :itemId ORDER BY timestamp DESC")
     fun getStockTransactions(itemId: Int): Flow<List<StockTransaction>>
 
@@ -94,6 +97,9 @@ interface CustomerDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDebtTransaction(tx: DebtTransaction)
+
+    @Delete
+    suspend fun deleteDebtTransaction(tx: DebtTransaction)
 
     @Query("SELECT * FROM debt_transactions WHERE customerId = :customerId ORDER BY timestamp DESC")
     fun getDebtTransactionsByCustomer(customerId: Int): Flow<List<DebtTransaction>>

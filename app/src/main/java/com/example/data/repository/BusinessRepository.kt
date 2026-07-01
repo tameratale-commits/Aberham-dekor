@@ -51,6 +51,10 @@ class BusinessRepository(
         inventoryDao.deleteInventoryItem(item)
     }
 
+    suspend fun deleteStockTransaction(tx: StockTransaction) {
+        inventoryDao.deleteStockTransaction(tx)
+    }
+
     suspend fun adjustStock(itemId: Int, type: String, quantity: Double, note: String?) {
         inventoryDao.adjustStock(itemId, type, quantity, note)
     }
@@ -69,6 +73,10 @@ class BusinessRepository(
 
     suspend fun deleteCustomer(customer: Customer) {
         customerDao.deleteCustomer(customer)
+    }
+
+    suspend fun deleteDebtTransaction(tx: DebtTransaction) {
+        customerDao.deleteDebtTransaction(tx)
     }
 
     suspend fun recordDebtChange(customerId: Int, type: String, amount: Double, note: String?) {

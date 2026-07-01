@@ -3,6 +3,10 @@ package com.example.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.scale
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -66,6 +70,11 @@ fun MainDashboard(
     // Dialog States
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
+    
+    // Passcode Delete States
+    var showPasscodeDialog by remember { mutableStateOf(false) }
+    var itemToDelete by remember { mutableStateOf<Any?>(null) }
+    var deleteActionType by remember { mutableStateOf<String?>(null) }
     
     val context = LocalContext.current
     val sharedPrefs = remember { context.getSharedPreferences("abraham_decor_prefs", Context.MODE_PRIVATE) }
@@ -132,6 +141,30 @@ fun MainDashboard(
     val totalDebtOutstanding = customers.sumOf { it.totalDebt }
     val lowStockCount = inventoryItems.filter { it.quantity <= it.minStockAlert }.size
 
+    val weeklyStart = remember(sales) {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            add(Calendar.DAY_OF_YEAR, -7)
+        }.timeInMillis
+    }
+
+    val monthlyStart = remember(sales) {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            add(Calendar.DAY_OF_YEAR, -30)
+        }.timeInMillis
+    }
+
+    val totalInventoryAsset = inventoryItems.sumOf { it.quantity * it.purchasePrice }
+    val weeklySales = sales.filter { it.timestamp >= weeklyStart }.sumOf { it.totalPrice }
+    val monthlySales = sales.filter { it.timestamp >= monthlyStart }.sumOf { it.totalPrice }
+
     val currentDensity = LocalDensity.current
     val customDensity = remember(currentDensity, textScale) {
         Density(
@@ -148,13 +181,13 @@ fun MainDashboard(
                     title = {
                         Column {
                             Text(
-                                text = "አብረሃም ዲኮር",
+                                text = "የሒሳብ መዝገብ አያያዝ",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "Abraham Car Decor & Accessories",
+                                text = "Ledger & Financial Record Keeping",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                             )
@@ -252,7 +285,10 @@ fun MainDashboard(
                         todaySalesRaw = todaySalesRaw,
                         todayExpensesRaw = todayExpensesRaw,
                         todayDebtRegistered = todayDebtRegistered,
-                        todayDebtPaid = todayDebtPaid
+                        todayDebtPaid = todayDebtPaid,
+                        totalInventoryAsset = totalInventoryAsset,
+                        weeklySales = weeklySales,
+                        monthlySales = monthlySales
                     )
                 }
 
@@ -275,7 +311,11 @@ fun MainDashboard(
                         onAddSale = { name, qty, unit, sellPrice, cust ->
                             viewModel.addSale(itemName = name, quantity = qty, unit = unit, unitPrice = sellPrice, customerName = cust, isRubber = false)
                         },
-                        onDeleteSale = { viewModel.deleteSale(it) },
+                        onDeleteSale = {
+                            itemToDelete = it
+                            deleteActionType = "SALE"
+                            showPasscodeDialog = true
+                        },
                         showAddBtn = showAddSaleBtn,
                         showNoticeBanner = showNoticeBanner
                     )
@@ -288,7 +328,11 @@ fun MainDashboard(
                         onAdjustStock = { id, type, qty, note ->
                             viewModel.adjustStock(id, type, qty, note)
                         },
-                        onDeleteItem = { viewModel.deleteInventoryItem(it) }
+                        onDeleteItem = {
+                            itemToDelete = it
+                            deleteActionType = "INVENTORY_ITEM"
+                            showPasscodeDialog = true
+                        }
                     )
                     2 -> CustomerDebtScreen(
                         customers = customers,
@@ -299,7 +343,11 @@ fun MainDashboard(
                         onAdjustDebt = { id, type, amount, note ->
                             viewModel.recordDebtChange(id, type, amount, note)
                         },
-                        onDeleteCustomer = { viewModel.deleteCustomer(it) }
+                        onDeleteCustomer = {
+                            itemToDelete = it
+                            deleteActionType = "CUSTOMER"
+                            showPasscodeDialog = true
+                        }
                     )
                     3 -> RubberSalesScreen(
                         sales = rubberSales,
@@ -307,7 +355,11 @@ fun MainDashboard(
                         onAddRubberSale = { name, qty, sellPrice, cust ->
                             viewModel.addSale(itemName = name, quantity = qty, unit = "ሜትር", unitPrice = sellPrice, customerName = cust, isRubber = true)
                         },
-                        onDeleteSale = { viewModel.deleteSale(it) },
+                        onDeleteSale = {
+                            itemToDelete = it
+                            deleteActionType = "SALE"
+                            showPasscodeDialog = true
+                        },
                         showAddBtn = showAddSaleBtn
                     )
                     4 -> ExpensesScreen(
@@ -316,7 +368,11 @@ fun MainDashboard(
                         onAddExpense = { title, category, amount ->
                             viewModel.addExpense(title, category, amount)
                         },
-                        onDeleteExpense = { viewModel.deleteExpense(it) }
+                        onDeleteExpense = {
+                            itemToDelete = it
+                            deleteActionType = "EXPENSE"
+                            showPasscodeDialog = true
+                        }
                     )
                 }
             }
@@ -331,6 +387,26 @@ fun MainDashboard(
             expenses = expenses,
             customers = customers,
             inventoryItems = inventoryItems,
+            onDeleteSale = {
+                itemToDelete = it
+                deleteActionType = "SALE"
+                showPasscodeDialog = true
+            },
+            onDeleteStockTx = {
+                itemToDelete = it
+                deleteActionType = "STOCK_TX"
+                showPasscodeDialog = true
+            },
+            onDeleteDebtTx = {
+                itemToDelete = it
+                deleteActionType = "DEBT_TX"
+                showPasscodeDialog = true
+            },
+            onDeleteExpense = {
+                itemToDelete = it
+                deleteActionType = "EXPENSE"
+                showPasscodeDialog = true
+            },
             onDismiss = { showHistoryDialog = false }
         )
     }
@@ -385,6 +461,112 @@ fun MainDashboard(
             onDismiss = { showSettingsDialog = false }
         )
     }
+
+    if (showPasscodeDialog) {
+        var enteredPasscode by remember { mutableStateOf("") }
+        var isError by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = {
+                showPasscodeDialog = false
+                itemToDelete = null
+                deleteActionType = null
+                enteredPasscode = ""
+                isError = false
+            },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = AccentRed,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("ማጥፊያ የይለፉ ቃል ማረጋገጫ", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "ይህንን መረጃ በቋሚነት ለማጥፋት እባክዎ ባለ 4 አሃዝ የይለፉ ቃል ያስገቡ።",
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "(ነባሪ የይለፉ ቃል: 1234)",
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = enteredPasscode,
+                        onValueChange = {
+                            if (it.length <= 4 && it.all { char -> char.isDigit() }) {
+                                enteredPasscode = it
+                                isError = false
+                            }
+                        },
+                        label = { Text("የይለፉ ቃል (Passcode)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        isError = isError,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (isError) {
+                        Text(
+                            text = "የተሳሳተ የይለፉ ቃል! እባክዎ እንደገና ይሞክሩ።",
+                            color = AccentRed,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (enteredPasscode == "1234") {
+                            val item = itemToDelete
+                            when (deleteActionType) {
+                                "SALE" -> if (item is Sale) viewModel.deleteSale(item)
+                                "STOCK_TX" -> if (item is StockTransaction) viewModel.deleteStockTransaction(item)
+                                "DEBT_TX" -> if (item is DebtTransaction) viewModel.deleteDebtTransaction(item)
+                                "EXPENSE" -> if (item is Expense) viewModel.deleteExpense(item)
+                                "INVENTORY_ITEM" -> if (item is InventoryItem) viewModel.deleteInventoryItem(item)
+                                "CUSTOMER" -> if (item is Customer) viewModel.deleteCustomer(item)
+                            }
+                            showPasscodeDialog = false
+                            itemToDelete = null
+                            deleteActionType = null
+                            enteredPasscode = ""
+                            isError = false
+                        } else {
+                            isError = true
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentRed)
+                ) {
+                    Text("አረጋግጥ (Confirm)")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPasscodeDialog = false
+                        itemToDelete = null
+                        deleteActionType = null
+                        enteredPasscode = ""
+                        isError = false
+                    }
+                ) {
+                    Text("ተመለስ (Cancel)")
+                }
+            }
+        )
+    }
     }
 }
 
@@ -399,7 +581,10 @@ fun SummaryDashboardRow(
     todaySalesRaw: Double = 0.0,
     todayExpensesRaw: Double = 0.0,
     todayDebtRegistered: Double = 0.0,
-    todayDebtPaid: Double = 0.0
+    todayDebtPaid: Double = 0.0,
+    totalInventoryAsset: Double = 0.0,
+    weeklySales: Double = 0.0,
+    monthlySales: Double = 0.0
 ) {
     val todayNet = todaySales - todayExpenses
     Column(
@@ -508,6 +693,83 @@ fun SummaryDashboardRow(
                 modifier = Modifier.weight(1f)
             )
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Total Warehouse Asset Card (በመጋዘን ያለ ሀብት)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "በመጋዘን ያለ ጠቅላላ ሀብት (Inventory Asset)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${formatCurrency(totalInventoryAsset)} Br",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            RoundedCornerShape(8.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Layers,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Weekly Sales Card
+            SummaryCard(
+                title = "የሳምንት ሽያጭ (7 ቀናት)",
+                value = "${formatCurrency(weeklySales)} Br",
+                icon = Icons.Default.ShoppingCart,
+                accentColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Monthly Sales Card
+            SummaryCard(
+                title = "የወር ሽያጭ (30 ቀናት)",
+                value = "${formatCurrency(monthlySales)} Br",
+                icon = Icons.Default.TrendingUp,
+                accentColor = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 
@@ -584,6 +846,45 @@ fun DashboardHeroBanner(
     currentTheme: AppThemeStyle,
     onThemeChange: (AppThemeStyle) -> Unit
 ) {
+    val bannerImages = remember {
+        listOf(
+            R.drawable.img_tech_workspace_1782899106032,
+            R.drawable.img_server_cloud_1782899117474,
+            R.drawable.img_digital_circuit_1782899129008,
+            R.drawable.img_coding_screen_1782899142256
+        )
+    }
+
+    var currentImageIndex by remember { mutableStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(4000)
+            currentImageIndex = (currentImageIndex + 1) % bannerImages.size
+        }
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "text_animation")
+    val floatOffset by infiniteTransition.animateFloat(
+        initialValue = -4f,
+        targetValue = 4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "float_offset"
+    )
+
+    val textScale by infiniteTransition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2800, easing = LinearOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "text_scale"
+    )
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -593,50 +894,84 @@ fun DashboardHeroBanner(
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Column {
-            // Header Image Banner with dark scrim overlay
+            // Header Image Banner with dark scrim overlay and smooth Crossfade transition
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(100.dp)
+                    .height(130.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.img_car_decor_banner_1782811501631),
-                    contentDescription = "Car Decor Header",
+                Crossfade(
+                    targetState = currentImageIndex,
+                    animationSpec = tween(durationMillis = 1200),
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-                // Linear gradient scrim overlay
+                    label = "image_carousel"
+                ) { index ->
+                    Image(
+                        painter = painterResource(id = bannerImages[index]),
+                        contentDescription = "ውሽዬ ሶፍትዌር ሶልሺን ቴክ ባነር",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
+                // Gradient overlay
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
-                                    Color.Black.copy(alpha = 0.3f),
-                                    Color.Black.copy(alpha = 0.75f)
+                                    Color.Black.copy(alpha = 0.4f),
+                                    Color.Black.copy(alpha = 0.78f)
                                 )
                             )
                         )
                 )
-                // Text overlay
+
+                // Text overlay with animations
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(12.dp),
-                    verticalArrangement = Arrangement.Bottom
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "አብረሃም መኪና ዲኮር",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "የእለት የሽያጭ እና ክምችት መከታተያ መተግበሪያ",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 11.sp
-                    )
+                    Column(
+                        modifier = Modifier
+                            .offset(y = floatOffset.dp)
+                            .scale(textScale),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "ውሽዬ ሶፍትዌር ሶልሺን",
+                            color = Color(0xFF00F0FF), // Neon tech cyan
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = TextAlign.Center,
+                            style = androidx.compose.ui.text.TextStyle(
+                                shadow = androidx.compose.ui.graphics.Shadow(
+                                    color = Color.Black,
+                                    offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                                    blurRadius = 4f
+                                )
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "የእለት ሽያጭ፣ መጋዘን እና የዕዳ መከታተያ ሲስተም",
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            style = androidx.compose.ui.text.TextStyle(
+                                shadow = androidx.compose.ui.graphics.Shadow(
+                                    color = Color.Black,
+                                    offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                                    blurRadius = 2f
+                                )
+                            )
+                        )
+                    }
                 }
             }
 
@@ -2850,6 +3185,10 @@ fun AllHistoryDialog(
     expenses: List<Expense>,
     customers: List<Customer>,
     inventoryItems: List<InventoryItem>,
+    onDeleteSale: (Sale) -> Unit,
+    onDeleteStockTx: (StockTransaction) -> Unit,
+    onDeleteDebtTx: (DebtTransaction) -> Unit,
+    onDeleteExpense: (Expense) -> Unit,
     onDismiss: () -> Unit
 ) {
     // Collect and sort history items
@@ -3124,7 +3463,8 @@ fun AllHistoryDialog(
                                         timestamp = item.sale.timestamp,
                                         icon = Icons.Default.ShoppingCart,
                                         tag = if (item.sale.isRubber) "ጎማ" else "የእለት",
-                                        tagColor = MaterialTheme.colorScheme.primary
+                                        tagColor = MaterialTheme.colorScheme.primary,
+                                        onDelete = { onDeleteSale(item.sale) }
                                     )
                                 }
                                 is HistoryItem.StockTxItem -> {
@@ -3137,7 +3477,8 @@ fun AllHistoryDialog(
                                         timestamp = item.tx.timestamp,
                                         icon = Icons.Default.Layers,
                                         tag = "ክምችት",
-                                        tagColor = MaterialTheme.colorScheme.secondary
+                                        tagColor = MaterialTheme.colorScheme.secondary,
+                                        onDelete = { onDeleteStockTx(item.tx) }
                                     )
                                 }
                                 is HistoryItem.DebtTxItem -> {
@@ -3150,7 +3491,8 @@ fun AllHistoryDialog(
                                         timestamp = item.tx.timestamp,
                                         icon = Icons.Default.People,
                                         tag = "ዕዳ",
-                                        tagColor = if (isDebt) AccentRed else AccentGreen
+                                        tagColor = if (isDebt) AccentRed else AccentGreen,
+                                        onDelete = { onDeleteDebtTx(item.tx) }
                                     )
                                 }
                                 is HistoryItem.ExpenseItem -> {
@@ -3162,7 +3504,8 @@ fun AllHistoryDialog(
                                         timestamp = item.expense.timestamp,
                                         icon = Icons.Default.AccountBalanceWallet,
                                         tag = "ወጪ",
-                                        tagColor = AccentRed
+                                        tagColor = AccentRed,
+                                        onDelete = { onDeleteExpense(item.expense) }
                                     )
                                 }
                             }
@@ -3190,7 +3533,8 @@ fun HistoryCard(
     timestamp: Long,
     icon: ImageVector,
     tag: String,
-    tagColor: Color
+    tagColor: Color,
+    onDelete: (() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -3236,12 +3580,30 @@ fun HistoryCard(
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = amount,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                color = amountColor
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = amount,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = amountColor
+                )
+                if (onDelete != null) {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "ሰርዝ",
+                            tint = AccentRed.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -3294,7 +3656,7 @@ fun GuideAndThemeDialog(
                     ) {
                         Column {
                             Text(
-                                text = "አብረሃም ዲኮር",
+                                text = "የሒሳብ መዝገብ አያያዝ",
                                 color = Color.White,
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold
@@ -3662,7 +4024,7 @@ fun SettingsDialog(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "አብረሃም ዲኮር - 123,456.00 ብር",
+                                        text = "የሒሳብ መዝገብ አያያዝ - 123,456.00 ብር",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 15.sp
                                     )
@@ -3823,7 +4185,7 @@ fun SettingsDialog(
                             Spacer(modifier = Modifier.height(12.dp))
 
                             Text(
-                                text = "አብረሃም ዲኮር መተግበሪያ (Abraham Car Decor Management System) ለመኪና ማሸብረቂያ እና መለዋወጫ መሸጫ መደብር የተዘጋጀ ዘመናዊ የሽያጭ እና ክምችት መቆጣጠሪያ ሲስተም ነው።",
+                                text = "የሒሳብ መዝገብ አያያዝ መተግበሪያ የዕለት ሽያጭን፣ የመጋዘን ክምችትን፣ ዕዳዎችን እና ሌሎች የንግድ ፋይናንስ እንቅስቃሴዎችን ለመቆጣጠር የተዘጋጀ ዘመናዊ ሲስተም ነው።",
                                 fontSize = 13.sp,
                                 lineHeight = 19.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
@@ -3869,7 +4231,7 @@ fun SettingsDialog(
                                     .padding(10.dp)
                             ) {
                                 Text(
-                                    text = "ስሪት (Version): 1.0.0\nየተገነባው ለ: አብረሃም ካር ዲኮር እና መለዋወጫ",
+                                    text = "ስሪት (Version): 1.0.0\nየተገነባው ለ: የሒሳብ መዝገብ አያያዝ እና ፋይናንስ ቁጥጥር",
                                     fontSize = 11.sp,
                                     lineHeight = 16.sp,
                                     color = MaterialTheme.colorScheme.primary,
